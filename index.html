@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05030c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>YOU MAN — Cité</title>
+<meta name="description" content="Une cité néon en 3D. Trouvez l'angle de caméra qui révèle le nom, puis jouez avec les fenêtres." />
+<link rel="stylesheet" href="./styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305030c'/%3E%3Cpath d='M6 22V10h3l3 5 3-5h3v12h-3v-7l-3 5-3-5v7z' fill='%2325e6ff'/%3E%3Crect x='22' y='10' width='4' height='12' fill='%23ff2fd0'/%3E%3C/svg%3E" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="stage">
+  <div id="frame">
+    <canvas id="scene"></canvas>
+
+    <!-- pluie / grain, purement décoratif -->
+    <div id="rain" aria-hidden="true"></div>
+    <div id="grain" aria-hidden="true"></div>
+    <div id="vignette" aria-hidden="true"></div>
+    <div id="flash" aria-hidden="true"></div>
+
+    <!-- ============ ÉCRAN D'ACCUEIL ============ -->
+    <section id="intro" class="screen">
+      <div class="intro-inner">
+        <p class="kicker">expérience audiovisuelle</p>
+        <h1 class="wordmark"><span class="w-you">YOU</span> <span class="w-man">MAN</span></h1>
+        <p class="tagline">Quelque part dans la cité, le nom est écrit.<br />Il n'apparaît que sous un seul angle.</p>
+        <button id="btn-start" class="cta">Toucher pour entrer</button>
+        <p class="fineprint">son activé &middot; casque recommandé</p>
+      </div>
+      <div id="loadbar"><i></i></div>
+    </section>
+
+    <!-- ============ NIVEAU 1 — L'ANGLE ============ -->
+    <section id="hud1" class="hud" hidden>
+      <header class="hud-top">
+        <span class="tag">01 · L'ANGLE</span>
+        <button id="btn-gyro" class="ghost" hidden>gyro</button>
+      </header>
+
+      <div id="hint" class="hint"></div>
+
+      <footer class="hud-bottom">
+        <div id="meter" class="meter" role="progressbar" aria-label="Résonance du signal" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="meter-track"><i id="meter-fill"></i></div>
+          <div class="meter-label"><span>résonance</span><b id="meter-val">00%</b></div>
+        </div>
+        <p class="prompt">glissez pour orienter la caméra</p>
+      </footer>
+    </section>
+
+    <!-- ============ RÉVÉLATION ============ -->
+    <section id="reveal" class="screen" hidden>
+      <div class="intro-inner">
+        <p class="kicker lock">signal verrouillé</p>
+        <h1 class="wordmark big"><span class="w-you">YOU</span> <span class="w-man">MAN</span></h1>
+        <p class="tagline">La cité vous a répondu.<br />Montez dans l'immeuble : ses fenêtres sont un séquenceur.</p>
+        <button id="btn-level2" class="cta">Niveau 02 — Les fenêtres</button>
+      </div>
+    </section>
+
+    <!-- ============ NIVEAU 2 — LES FENÊTRES ============ -->
+    <section id="hud2" class="hud" hidden>
+      <header class="hud-top">
+        <span class="tag">02 · LES FENÊTRES</span>
+        <button id="btn-back" class="ghost">cité</button>
+      </header>
+
+      <div id="hint2" class="hint"></div>
+
+      <footer class="hud-bottom seq">
+        <div class="transport">
+          <button id="btn-play" class="key wide" aria-pressed="true"><span id="play-glyph">❚❚</span> <em id="play-label">lecture</em></button>
+          <button id="btn-demo" class="key">motif</button>
+          <button id="btn-clear" class="key">vider</button>
+        </div>
+        <div class="tempo">
+          <button id="bpm-down" class="key round" aria-label="Ralentir">–</button>
+          <div class="bpm"><b id="bpm-val">102</b><span>bpm</span></div>
+          <button id="bpm-up" class="key round" aria-label="Accélérer">+</button>
+        </div>
+        <p class="prompt">touchez les fenêtres · 8 pistes</p>
+      </footer>
+    </section>
+
+    <!-- ============ SURVOL LIBRE ============ -->
+    <section id="freebar" hidden>
+      <span class="tag">survol · le nom est allumé</span>
+      <button id="btn-resume" class="ghost">← fenêtres</button>
+    </section>
+
+    <div id="rotate" hidden><p>Tournez l'appareil<br /><small>expérience conçue en 9:16</small></p></div>
+    <div id="fail" hidden><p>WebGL indisponible sur cet appareil.<br /><small>Essayez un navigateur récent.</small></p></div>
+  </div>
+</div>
+
+<noscript>
+  <div class="noscript">Cette expérience nécessite JavaScript et WebGL.</div>
+</noscript>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
