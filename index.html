@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>YOU MAN — Cité</title>
-<meta name="description" content="Une cité néon en 3D. Trouvez l'angle de caméra qui révèle le nom, puis jouez avec les fenêtres." />
+<meta name="description" content="Une cité néon en 3D. Trouvez l'angle qui révèle le nom, puis composez sur les toits." />
 <link rel="stylesheet" href="./styles.css" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305030c'/%3E%3Cpath d='M6 22V10h3l3 5 3-5h3v12h-3v-7l-3 5-3-5v7z' fill='%2325e6ff'/%3E%3Crect x='22' y='10' width='4' height='12' fill='%23ff2fd0'/%3E%3C/svg%3E" />
 <script type="importmap">
@@ -66,15 +66,15 @@
       <div class="intro-inner">
         <p class="kicker lock">signal verrouillé</p>
         <h1 class="wordmark big"><span class="w-you">YOU</span> <span class="w-man">MAN</span></h1>
-        <p class="tagline">La cité vous a répondu.<br />Montez dans l'immeuble : ses fenêtres sont un séquenceur.</p>
-        <button id="btn-level2" class="cta">Niveau 02 — Les fenêtres</button>
+        <p class="tagline">La cité vous a répondu.<br />Restez au-dessus : le nom bat la mesure, les toits jouent la mélodie.</p>
+        <button id="btn-level2" class="cta">Niveau 02 — Les toits</button>
       </div>
     </section>
 
-    <!-- ============ NIVEAU 2 — LES FENÊTRES ============ -->
+    <!-- ============ NIVEAU 2 — LES TOITS ============ -->
     <section id="hud2" class="hud" hidden>
       <header class="hud-top">
-        <span class="tag">02 · LES FENÊTRES</span>
+        <span class="tag">02 · LES TOITS</span>
         <button id="btn-back" class="ghost">cité</button>
       </header>
 
@@ -83,22 +83,24 @@
       <footer class="hud-bottom seq">
         <div class="transport">
           <button id="btn-play" class="key wide" aria-pressed="true"><span id="play-glyph">❚❚</span> <em id="play-label">lecture</em></button>
+          <button id="btn-word" class="key accent" aria-pressed="true">le mot</button>
+        </div>
+        <div class="transport second">
           <button id="btn-demo" class="key">motif</button>
           <button id="btn-clear" class="key">vider</button>
+          <div class="tempo">
+            <button id="bpm-down" class="key round" aria-label="Ralentir">–</button>
+            <div class="bpm"><b id="bpm-val">122</b><span>bpm</span></div>
+            <button id="bpm-up" class="key round" aria-label="Accélérer">+</button>
+          </div>
         </div>
-        <div class="tempo">
-          <button id="bpm-down" class="key round" aria-label="Ralentir">–</button>
-          <div class="bpm"><b id="bpm-val">102</b><span>bpm</span></div>
-          <button id="bpm-up" class="key round" aria-label="Accélérer">+</button>
-        </div>
-        <p class="prompt">touchez les fenêtres · 8 pistes</p>
       </footer>
     </section>
 
     <!-- ============ SURVOL LIBRE ============ -->
     <section id="freebar" hidden>
-      <span class="tag">survol · le nom est allumé</span>
-      <button id="btn-resume" class="ghost">← fenêtres</button>
+      <span class="tag">survol libre</span>
+      <button id="btn-resume" class="ghost">← séquenceur</button>
     </section>
 
     <div id="rotate" hidden><p>Tournez l'appareil<br /><small>expérience conçue en 9:16</small></p></div>

@@ -5,7 +5,6 @@ import {
   FogExp2,
   Object3D,
   PerspectiveCamera,
-  Quaternion,
   Scene,
   SRGBColorSpace,
   Vector2,
@@ -17,7 +16,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-import { BPM, CAM, PALETTE } from './config.js';
+import { AERIAL, BPM, CAM, PADS, PALETTE } from './config.js';
 import { buildCity } from './city.js';
 import { setTextureAnisotropy } from './textures.js';
 import { createAudio } from './audio.js';
@@ -50,6 +49,7 @@ const dom = {
   btnPlay: $('btn-play'),
   playGlyph: $('play-glyph'),
   playLabel: $('play-label'),
+  btnWord: $('btn-word'),
   btnDemo: $('btn-demo'),
   btnClear: $('btn-clear'),
   bpmVal: $('bpm-val'),
@@ -145,7 +145,7 @@ const level1 = createLevel1({
 });
 
 const level2 = createLevel2({
-  scene,
+  city,
   camera,
   canvas: dom.canvas,
   audio,
@@ -159,9 +159,11 @@ dom.loadbar.style.width = '100%';
 
 /** 'intro' | 'puzzle' | 'reveal' | 'flight' | 'sequencer' | 'free' */
 let phase = 'intro';
+let wordFocus = 0;
 let flare = 0;
 let bloomBoost = 0;
 let flight = null;
+let goingToSequencer = false;
 
 const clock = new Clock();
 const tmpVec = new Vector3();
@@ -253,46 +255,59 @@ function syncBpm() {
 }
 
 function setPlaying(on) {
-  if (on) audio.sequencer.start(level2.pattern);
+  if (on) audio.sequencer.start({ pattern: level2.pattern, groove: level2.groove });
   else audio.sequencer.stop();
   dom.btnPlay.setAttribute('aria-pressed', String(on));
-  dom.playGlyph.textContent = on ? '❚❚' : '▶';
+  dom.playGlyph.textContent = on ? '\u275a\u275a' : '\u25b6';
   dom.playLabel.textContent = on ? 'lecture' : 'pause';
+}
+
+function setGroove(on) {
+  audio.sequencer.setGrooveEnabled(on);
+  dom.btnWord.setAttribute('aria-pressed', String(on));
+  if (!on) city.stopSweep();
+}
+
+/** Pose visée par le survol du niveau 2, en quaternion monde. */
+function aerialPose() {
+  const f = level2.framing(camera.aspect, level2.sway);
+  dummyCam.position.copy(f.position);
+  dummyCam.lookAt(f.target);
+  return { position: f.position.clone(), quaternion: dummyCam.quaternion.clone() };
 }
 
 function enterSequencer(firstTime) {
   phase = 'flight';
+  goingToSequencer = true;
   dom.reveal.hidden = true;
   dom.freebar.hidden = true;
   level1.state.inputEnabled = false;
   level2.setActive(false);
 
-  const aspect = camera.aspect;
-  const f = level2.framing(aspect);
-  dummyCam.position.set(f.position[0], f.position[1], f.position[2]);
-  dummyCam.lookAt(f.target[0], f.target[1], f.target[2]);
-  const toQ = new Quaternion().copy(dummyCam.quaternion);
-
-  startFlight(new Vector3(...f.position), toQ, firstTime ? 3.2 : 2.2, () => {
+  const pose = aerialPose();
+  startFlight(pose.position, pose.quaternion, firstTime ? 3.4 : 2.2, () => {
     phase = 'sequencer';
     level2.setActive(true);
     dom.hud2.hidden = false;
     if (firstTime) {
       level2.loadSeed();
       syncBpm();
+      setGroove(true);
       setPlaying(true);
-      dom.hint2.textContent = 'touchez une fenêtre pour poser une note';
+      dom.hint2.textContent = 'le mot tient le rythme — touchez les toits pour la mélodie';
       dom.hint2.classList.add('show');
-      setTimeout(() => dom.hint2.classList.remove('show'), 5200);
+      setTimeout(() => dom.hint2.classList.remove('show'), 6000);
     }
   });
 
-  audio.duckDrone(0.16);
-  dom.rain.style.opacity = '0.1';
+  // Le drone du niveau 1 disparaît : place au morceau.
+  audio.silenceDrone();
+  dom.rain.style.opacity = '0.08';
 }
 
 function enterFreeFlight() {
   phase = 'flight';
+  goingToSequencer = false;
   dom.hud2.hidden = true;
   level2.setActive(false);
   level1.enterFreeMode();
@@ -302,10 +317,11 @@ function enterFreeFlight() {
   level1.applyCamera();
   const toPos = camera.position.clone();
   const toQ = camera.quaternion.clone();
-  // on repart de là où était la caméra du séquenceur
-  const f = level2.framing(camera.aspect);
-  camera.position.set(f.position[0], f.position[1], f.position[2]);
-  camera.lookAt(f.target[0], f.target[1], f.target[2]);
+
+  // on repart de la pose de survol du séquenceur
+  const pose = aerialPose();
+  camera.position.copy(pose.position);
+  camera.quaternion.copy(pose.quaternion);
 
   startFlight(toPos, toQ, 2.4, () => {
     phase = 'free';
@@ -325,6 +341,7 @@ dom.btnClear.addEventListener('click', () => {
   level2.clear();
   audio.sequencer.setPattern(level2.pattern);
 });
+dom.btnWord.addEventListener('click', () => setGroove(!audio.sequencer.grooveOn));
 dom.btnDemo.addEventListener('click', () => {
   level2.loadDemo();
   audio.sequencer.setPattern(level2.pattern);
@@ -402,8 +419,14 @@ function animate() {
 
   if (phase === 'sequencer' || phase === 'flight') {
     audio.drainSteps((step) => level2.onStep(step));
+    city.setAltitude(1);
   }
   level2.update(dt, camera.aspect);
+
+  // En survol, on efface le bâti pour que le nom reste lisible.
+  const focusTarget = phase === 'sequencer' || (phase === 'flight' && goingToSequencer) ? 1 : 0;
+  wordFocus += (focusTarget - wordFocus) * Math.min(1, dt * 1.6);
+  city.setWordFocus(wordFocus);
 
   if (flare > 0) {
     flare = Math.max(0, flare - dt * 0.6);
@@ -423,6 +446,7 @@ function animate() {
 // Petite fenêtre de debug : utile pour régler l'énigme sans recharger.
 window.YOUMAN = {
   get phase() { return phase; },
+  config: { AERIAL, PADS },
   level1,
   level2,
   city,

@@ -72,54 +72,76 @@ export const PUZZLE = {
   ],
 };
 
-/** Immeuble-séquenceur du niveau 2. */
-export const HERO = {
-  position: [0, 0, 318],
-  width: 80,
-  depth: 50,
-  height: 182,
-  /** Grille jouable. */
+/**
+ * Quartier-séquenceur du niveau 2 : une dalle de 8 × 8 immeubles bas, au sud
+ * du mot. Leurs toits sont les pads.
+ */
+export const PADS = {
   cols: 8,
   rows: 8,
-  cellSize: 6.2,
-  gridCenterY: 130,
-  camDistance: 86,
+  /** Pas de la trame (une parcelle de pad est plus large qu'une parcelle de ville). */
+  cell: 21,
+  /** Espace laissé entre le bas du mot et la première rangée de pads. */
+  gapFromWord: 40,
+  height: [9, 26],
+  foot: 17.5,
 };
 
-/** Les 8 pistes, de haut en bas de la façade. */
+/** Caméra du niveau 2 : survol oblique, le mot au fond, les pads devant. */
+export const AERIAL = {
+  elevation: 0.95, // rad — ~54°
+  distance: 538,
+  /** Point visé, en Z local (0 = centre du mot). */
+  pivotZ: 156,
+  pivotY: 16,
+  /** Amplitude du léger balancement continu : assez pour respirer, pas assez
+   *  pour gêner la lecture du nom ni la visée des toits. */
+  swayAzimuth: 0.018,
+  swayElevation: 0.011,
+  swayPeriod: 30,
+};
+
+/**
+ * Les 8 pistes du joueur, de la rangée la plus lointaine à la plus proche.
+ * Toutes mélodiques : la batterie, elle, vient du mot.
+ */
 export const TRACKS = [
-  { id: 'lead', name: 'C5', freq: 523.25, hue: 0.52, kind: 'lead' },
-  { id: 'lead', name: 'A#4', freq: 466.16, hue: 0.56, kind: 'lead' },
-  { id: 'lead', name: 'G4', freq: 392.0, hue: 0.6, kind: 'lead' },
-  { id: 'lead', name: 'F4', freq: 349.23, hue: 0.66, kind: 'lead' },
-  { id: 'lead', name: 'D#4', freq: 311.13, hue: 0.72, kind: 'lead' },
-  { id: 'bass', name: 'C2', freq: 65.41, hue: 0.8, kind: 'bass' },
-  { id: 'clap', name: 'CLP', freq: 0, hue: 0.88, kind: 'clap' },
-  { id: 'kick', name: 'KCK', freq: 0, hue: 0.95, kind: 'kick' },
+  { name: 'C5', freq: 523.25, hue: 0.5 },
+  { name: 'A#4', freq: 466.16, hue: 0.55 },
+  { name: 'G4', freq: 392.0, hue: 0.6 },
+  { name: 'F4', freq: 349.23, hue: 0.65 },
+  { name: 'D#4', freq: 311.13, hue: 0.72 },
+  { name: 'C4', freq: 261.63, hue: 0.79 },
+  { name: 'G3', freq: 196.0, hue: 0.86 },
+  { name: 'C3', freq: 130.81, hue: 0.92 },
 ];
 
-/** Motif d'amorce proposé par le bouton « motif ». */
+/** Une mesure de 16 doubles-croches ; les pads bouclent sur 8. */
+export const STEPS = 16;
+export const PAD_STEPS = 8;
+
+/** Motif proposé par le bouton « motif » — 8 pistes × 8 pas. */
 export const DEMO_PATTERN = [
+  [0, 0, 0, 0, 0, 0, 1, 0],
   [0, 0, 1, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 1, 0, 0],
+  [0, 0, 0, 0, 1, 0, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 1, 0, 0, 1, 0],
+  [0, 1, 0, 0, 0, 1, 0, 0],
   [1, 0, 0, 0, 1, 0, 0, 0],
-  [0, 0, 0, 1, 0, 0, 0, 1],
-  [0, 1, 0, 0, 0, 0, 1, 0],
   [1, 0, 0, 1, 0, 0, 1, 0],
-  [0, 0, 1, 0, 0, 0, 1, 0],
-  [1, 0, 0, 0, 1, 0, 0, 1],
 ];
 
-/** Amorce jouée dès l'entrée dans le niveau 2 : juste une pulsation. */
+/** Amorce jouée dès l'entrée dans le niveau 2 : une simple ligne de basse. */
 export const SEED_PATTERN = [
   [0, 0, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [1, 0, 0, 0, 0, 0, 1, 0],
-  [0, 0, 1, 0, 0, 0, 1, 0],
-  [1, 0, 0, 0, 1, 0, 0, 0],
+  [0, 0, 1, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 1, 0],
+  [0, 0, 0, 0, 1, 0, 0, 0],
+  [1, 0, 0, 0, 0, 0, 0, 0],
 ];
 
-export const BPM = { min: 72, max: 148, start: 102, step: 2 };
+export const BPM = { min: 96, max: 138, start: 122, step: 2 };

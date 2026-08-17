@@ -19,7 +19,7 @@ import {
   SphereGeometry,
 } from 'three';
 
-import { GRID, PALETTE, TEXT_YAW } from './config.js';
+import { GRID, PADS, PALETTE, TEXT_YAW } from './config.js';
 import { layoutText } from './font.js';
 import {
   makeFacadeTexture,
@@ -90,12 +90,21 @@ export function buildCity(scene) {
   root.add(ground);
 
   // ------------------------------------------------- disposition des lettres
-  const { cells, width: cols, height: rows } = layoutText(['YOU', 'MAN'], GRID.lineGap);
+  const { cells, width: cols, height: rows, bands } = layoutText(['YOU', 'MAN'], GRID.lineGap);
   const cell = GRID.cell;
   const fieldW = cols * cell;
   const fieldD = rows * cell;
   const originX = -fieldW / 2 + cell / 2;
   const originZ = -fieldD / 2 + cell / 2;
+
+  // Emprise réservée au quartier-séquenceur (niveau 2), au sud du mot.
+  const padDepth = PADS.rows * PADS.cell;
+  const padCenterZ = fieldD / 2 + PADS.gapFromWord + padDepth / 2;
+  const padZone = {
+    halfW: (PADS.cols * PADS.cell) / 2 + 22,
+    near: padCenterZ - padDepth / 2 - 22,
+    far: padCenterZ + padDepth / 2 + 22,
+  };
 
   const letterSlots = [];
   const podiumSlots = [];
@@ -232,8 +241,6 @@ export function buildCity(scene) {
     GRID.fillerCount
   );
 
-  const cosY = Math.cos(TEXT_YAW);
-  const sinY = Math.sin(TEXT_YAW);
   let placed = 0;
   let guard = 0;
   while (placed < GRID.fillerCount && guard++ < GRID.fillerCount * 40) {
@@ -242,10 +249,8 @@ export function buildCity(scene) {
     const x = Math.cos(a) * rad;
     const z = Math.sin(a) * rad;
 
-    // on garde l'esplanade de l'immeuble-séquenceur dégagée
-    const wx = x * cosY + z * sinY;
-    const wz = -x * sinY + z * cosY;
-    if (Math.hypot(wx - 0, wz - 318) < 105) continue;
+    // on garde dégagée la dalle du séquenceur, au sud du mot
+    if (Math.abs(x) < padZone.halfW && z > padZone.near && z < padZone.far) continue;
 
     const h = rand(GRID.fillerH[0], GRID.fillerH[1]) * (rad > 320 ? 1.25 : 1);
     const fw = rand(GRID.fillerFoot[0], GRID.fillerFoot[1]);
@@ -344,37 +349,71 @@ export function buildCity(scene) {
   beam.position.set(beamHost.x, beamHost.y + 120, beamHost.z);
   root.add(beam);
 
+  // -------------------------------------------------- barre de balayage du mot
+  const scanBar = new Mesh(
+    new PlaneGeometry(cell * 1.05, fieldD + cell * 2),
+    new MeshBasicMaterial({
+      color: 0xbff2ff,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+      fog: false,
+    })
+  );
+  scanBar.rotation.x = -Math.PI / 2;
+  scanBar.position.set(originX, 1.2, 0);
+  scanBar.visible = false;
+  root.add(scanBar);
+
   // ------------------------------------------------------------------- état
   const capBase = capColors;
-  let currentLock = -1;
+  /** Colonne de la trame pour chaque tour-lettre : sert au balayage. */
+  const columnOf = letterSlots.map((slot) => slot.c);
+  /** Surbrillance transitoire par colonne, entretenue par le séquenceur. */
+  const columnFlash = new Float32Array(cols);
+  let flashActive = false;
+
+  let lockValue = 0;
+  let flareValue = 0;
   let altitude = 0; // 0 = niveau de la rue, 1 = zénith
+  let focus = 0;    // 0 = ville normale, 1 = tout s'efface derrière le mot
+  let capsDirty = true;
 
   /**
-   * Pilote l'intensité des néons du nom en fonction de la proximité de la
-   * bonne caméra. C'est le seul retour visuel "chaud/froid" du niveau 1.
-   *
-   * @param {number} lock 0 = perdu, 1 = angle exact
-   * @param {number} [flare] surbrillance ponctuelle lors de la révélation
+   * Repeint les couronnes. Trois contributions s'additionnent : la proximité
+   * de l'angle (niveau 1), l'éclat de la révélation, et le balayage du
+   * séquenceur colonne par colonne (niveau 2).
    */
-  function setLock(lock, flare = 0) {
-    const key = Math.round(lock * 400) + Math.round(flare * 400) * 1000;
-    if (key === currentLock) return;
-    currentLock = key;
-
-    const eased = Math.pow(Math.max(0, Math.min(1, lock)), 1.7);
+  function paintCaps() {
+    const eased = Math.pow(Math.max(0, Math.min(1, lockValue)), 1.7);
     // Vues de la rue, les couronnes ne sont qu'un indice ; c'est en montant
     // qu'elles prennent toute leur intensité.
     const reach = 0.4 + 0.6 * altitude;
-    const gain = (0.18 + eased * 1.1) * reach + flare * 2.3;
+    const base = (0.18 + eased * 1.1) * reach + flareValue * 2.3 + focus * 0.45;
 
     for (let i = 0; i < capBase.length; i++) {
       const c = capBase[i];
+      const gain = base + columnFlash[columnOf[i]] * 2.6;
       caps.setColorAt(i, color.setRGB(c.r * gain, c.g * gain, c.b * gain));
     }
     caps.instanceColor.needsUpdate = true;
 
-    halos.material.opacity = 0.07 + eased * 0.34 + flare * 0.5;
+    halos.material.opacity = 0.07 + eased * 0.34 + flareValue * 0.5;
     beam.material.opacity = (0.035 + eased * 0.02) * (1 - altitude);
+  }
+
+  /**
+   * @param {number} lock 0 = perdu, 1 = angle exact
+   * @param {number} [flare] surbrillance ponctuelle lors de la révélation
+   */
+  function setLock(lock, flare = 0) {
+    if (lock === lockValue && flare === flareValue && !capsDirty) return;
+    lockValue = lock;
+    flareValue = flare;
+    capsDirty = false;
+    paintCaps();
   }
 
   /**
@@ -382,9 +421,47 @@ export function buildCity(scene) {
    * volumétrique masquerait le nom.
    */
   function setAltitude(u) {
-    altitude = Math.max(0, Math.min(1, u));
+    const next = Math.max(0, Math.min(1, u));
+    if (Math.abs(next - altitude) < 0.002) return;
+    altitude = next;
     beam.visible = altitude < 0.97;
-    currentLock = -1; // force la reprise de l'opacité au prochain setLock
+    capsDirty = true;
+  }
+
+  /**
+   * Éteint progressivement le bâti pour ne laisser que les couronnes : en
+   * survol oblique, les façades des tours brouillent la lecture du nom.
+   *
+   * @param {number} k 0 = ville normale, 1 = mise au point complète
+   */
+  function setWordFocus(k) {
+    const next = Math.max(0, Math.min(1, k));
+    if (Math.abs(next - focus) < 0.004) return;
+    focus = next;
+    towers.material.color.setScalar(1 - 0.66 * focus);
+    podiums.material.color.setScalar(1 - 0.72 * focus);
+    fillers.material.color.setScalar(1 - 0.6 * focus);
+    ground.material.color.setScalar(1 - 0.55 * focus);
+    streetGlow.material.opacity = 0.5 * (1 - 0.55 * focus);
+    capsDirty = true;
+  }
+
+  /** Allume la colonne `c` : le pas que le séquenceur vient de jouer. */
+  function pulseColumn(c, strength = 1) {
+    if (c < 0 || c >= cols) return;
+    columnFlash[c] = strength;
+    flashActive = true;
+    scanBar.visible = true;
+    scanBar.position.x = originX + c * cell;
+    scanBar.material.opacity = 0.34 * strength;
+    capsDirty = true;
+  }
+
+  function stopSweep() {
+    columnFlash.fill(0);
+    flashActive = false;
+    scanBar.visible = false;
+    capsDirty = true;
   }
 
   function update(dt, elapsed) {
@@ -402,9 +479,23 @@ export function buildCity(scene) {
 
     beam.rotation.z = Math.sin(elapsed * 0.19) * 0.5;
     beam.rotation.x = Math.PI + Math.cos(elapsed * 0.13) * 0.32;
+
+    if (flashActive) {
+      let any = false;
+      for (let c = 0; c < cols; c++) {
+        if (columnFlash[c] <= 0) continue;
+        columnFlash[c] = Math.max(0, columnFlash[c] - dt * 4.2);
+        any = any || columnFlash[c] > 0;
+      }
+      flashActive = any;
+      scanBar.material.opacity = Math.max(0, scanBar.material.opacity - dt * 1.4);
+      capsDirty = true;
+    }
+
+    if (capsDirty) paintCaps();
   }
 
-  setLock(0);
+  paintCaps();
 
   for (const mesh of [towers, caps, halos, podiums, fillers, streetGlow]) {
     mesh.instanceMatrix.needsUpdate = true;
@@ -419,11 +510,17 @@ export function buildCity(scene) {
     towers,
     caps,
     halos,
+    /** Trame du mot, réutilisée par le séquenceur pour en déduire la rythmique. */
+    text: { cells, cols, rows, bands, cell, originX, originZ },
+    padZone: { centerZ: padCenterZ, depth: padDepth },
     fieldRadius: Math.hypot(fieldW, fieldD) / 2,
     fieldSize: { w: fieldW, d: fieldD },
     letterCount: letterSlots.length,
     setLock,
     setAltitude,
+    setWordFocus,
+    pulseColumn,
+    stopSweep,
     update,
   };
 }

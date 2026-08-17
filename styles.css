@@ -334,9 +334,17 @@ body {
 
 /* ------------------------------------------------------ transport N2 */
 
-.hud-bottom.seq { gap: 14px; }
+.hud-bottom.seq { gap: 8px; }
 
-.transport { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; }
+.transport {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 8px;
+}
+.transport.second {
+  grid-template-columns: 1fr 1fr 1.5fr;
+  align-items: center;
+}
 
 .key {
   appearance: none;
@@ -347,7 +355,7 @@ body {
   font-size: 10.5px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  padding: 13px 6px;
+  padding: 11px 6px;
   border-radius: 2px;
   cursor: pointer;
   backdrop-filter: blur(8px);
@@ -356,14 +364,22 @@ body {
 .key:active { transform: scale(0.96); }
 .key.wide { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .key.wide em { font-style: normal; }
+.key.accent[aria-pressed="true"] {
+  border-color: rgba(255, 47, 208, 0.6);
+  color: #ffeaf9;
+  box-shadow: 0 0 20px rgba(255, 47, 208, 0.3), inset 0 0 18px rgba(255, 47, 208, 0.08);
+}
+.key.accent[aria-pressed="false"] { opacity: 0.55; }
+
 .key.wide[aria-pressed="true"] {
   border-color: rgba(37, 230, 255, 0.6);
   color: #eafcff;
   box-shadow: 0 0 20px rgba(37, 230, 255, 0.28), inset 0 0 18px rgba(37, 230, 255, 0.08);
 }
 .key.round {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
   padding: 0;
   border-radius: 50%;
   font-size: 17px;
@@ -373,17 +389,17 @@ body {
 .tempo {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .bpm {
-  min-width: 74px;
+  min-width: 52px;
   text-align: center;
   line-height: 1;
 }
 .bpm b {
   display: block;
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #eafcff;

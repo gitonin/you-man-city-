@@ -1,87 +1,75 @@
 import {
   AdditiveBlending,
   BoxGeometry,
-  CanvasTexture,
   Color,
   Group,
   InstancedMesh,
-  LinearFilter,
   Mesh,
   MeshBasicMaterial,
   Object3D,
   PlaneGeometry,
   Raycaster,
   Vector2,
+  Vector3,
 } from 'three';
 
-import { DEMO_PATTERN, HERO, SEED_PATTERN, TRACKS } from './config.js';
-import { makeFacadeTexture, makeGlowTexture, makeWindowPaneTexture } from './textures.js';
+import { AERIAL, DEMO_PATTERN, PADS, PAD_STEPS, SEED_PATTERN, TRACKS } from './config.js';
+import { deriveGroove } from './groove.js';
+import { makeFacadeTexture, makeGlowTexture } from './textures.js';
 
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-
-/** Bandeau des noms de pistes, peint au canvas. */
-function makeLabelTexture(rows) {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128 * rows;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  ctx.font = '600 40px "Helvetica Neue", Helvetica, Arial, sans-serif';
-  for (let r = 0; r < rows; r++) {
-    const track = TRACKS[r];
-    ctx.fillStyle = `hsl(${Math.round(track.hue * 360)}, 100%, 74%)`;
-    ctx.fillText(track.name, c.width - 16, r * 128 + 64);
-  }
-  const tex = new CanvasTexture(c);
-  tex.minFilter = LinearFilter;
-  tex.magFilter = LinearFilter;
-  return tex;
-}
+const rand = (a, b) => a + Math.random() * (b - a);
 
 /**
- * Niveau 2 — « Les fenêtres ».
+ * Niveau 2 — « Les toits ».
  *
- * Un immeuble de la cité sert de séquenceur : 8 pistes (les étages), 8 pas
- * (les travées). Allumer une fenêtre, c'est poser une note.
+ * Survol oblique du quartier. Au fond, le mot « YOU MAN » : ses colonnes
+ * s'allument l'une après l'autre et *sont* la boucle rythmique (voir
+ * `groove.js`). Devant, une dalle de 8 × 8 immeubles bas dont les toits sont
+ * les pads du joueur : 8 pistes mélodiques, 8 pas, une note par toit.
+ *
+ * Tout vit dans le repère tourné de la ville, si bien que le mot reste lisible
+ * et que la caméra n'a qu'à regarder droit devant elle.
  */
-export function createLevel2({ scene, camera, canvas, audio, hud }) {
-  const { cols, rows, cellSize } = HERO;
+export function createLevel2({ city, camera, canvas, audio, hud }) {
+  const { cols, rows, cell } = PADS;
   const dummy = new Object3D();
   const color = new Color();
 
-  // ------------------------------------------------------------- immeuble
   const group = new Group();
-  group.position.set(...HERO.position);
-  scene.add(group);
+  group.position.set(0, 0, city.padZone.centerZ);
+  city.root.add(group);
 
-  const facadeTex = makeFacadeTexture({
-    cols: 7,
-    rows: 14,
+  const padX = (col) => (col - (cols - 1) / 2) * cell;
+  const padZ = (row) => ((rows - 1) / 2 - row) * cell; // rangée 0 au fond
+
+  // ------------------------------------------------------- immeubles-pads
+  const bodyTex = makeFacadeTexture({
+    cols: 4,
+    rows: 4,
     lit: 0.3,
-    tints: ['#bcdcff', '#ffcf95', '#ffffff'],
-    wall: '#0d1120',
+    tints: ['#9fc4ff', '#ffcf95', '#e8f1ff'],
+    wall: '#080a14',
   });
-  facadeTex.repeat.set(3, 5);
 
-  const body = new Mesh(
-    new BoxGeometry(HERO.width, HERO.height, HERO.depth),
-    new MeshBasicMaterial({ map: facadeTex, color: 0xdfe9ff })
+  const count = cols * rows;
+  const bodies = new InstancedMesh(
+    new BoxGeometry(1, 1, 1),
+    new MeshBasicMaterial({ map: bodyTex }),
+    count
   );
-  body.position.y = HERO.height / 2;
-  group.add(body);
+  bodies.frustumCulled = false;
 
-  const crown = new Mesh(
-    new BoxGeometry(HERO.width + 2.6, 2.2, HERO.depth + 2.6),
-    new MeshBasicMaterial({ color: 0x25e6ff, toneMapped: false, fog: false })
+  // Le toit : c'est lui qu'on touche et lui qui s'allume.
+  const roofs = new InstancedMesh(
+    new PlaneGeometry(1, 1),
+    new MeshBasicMaterial({ toneMapped: false, fog: false }),
+    count
   );
-  crown.position.y = HERO.height + 1.1;
-  group.add(crown);
+  roofs.frustumCulled = false;
 
   const glowTex = makeGlowTexture(160, 2.4);
-  const crownHalo = new Mesh(
-    new PlaneGeometry(HERO.width * 3, HERO.width * 3),
+  const roofGlow = new InstancedMesh(
+    new PlaneGeometry(cell * 2.3, cell * 2.3),
     new MeshBasicMaterial({
       map: glowTex,
       transparent: true,
@@ -89,47 +77,68 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
       depthWrite: false,
       toneMapped: false,
       fog: false,
-      opacity: 0.3,
-    })
-  );
-  crownHalo.rotation.x = -Math.PI / 2;
-  crownHalo.position.y = HERO.height + 4;
-  group.add(crownHalo);
-
-  // --------------------------------------------------------------- grille
-  const frontZ = HERO.depth / 2;
-  const count = cols * rows;
-
-  const cellX = (col) => (col - (cols - 1) / 2) * cellSize;
-  const cellY = (row) => HERO.gridCenterY + ((rows - 1) / 2 - row) * cellSize;
-
-  // renfoncement sombre derrière chaque fenêtre
-  const wells = new InstancedMesh(
-    new PlaneGeometry(cellSize * 0.9, cellSize * 0.9),
-    new MeshBasicMaterial({ color: 0x0a1020, fog: false }),
-    count
-  );
-  wells.frustumCulled = false;
-
-  const paneTex = makeWindowPaneTexture();
-  const panes = new InstancedMesh(
-    new PlaneGeometry(cellSize * 0.82, cellSize * 0.82),
-    new MeshBasicMaterial({
-      map: paneTex,
-      transparent: true,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-      fog: false,
+      opacity: 0.9,
     }),
     count
   );
-  panes.frustumCulled = false;
+  roofGlow.frustumCulled = false;
+  roofGlow.renderOrder = 4;
 
-  const bloomHalos = new InstancedMesh(
-    new PlaneGeometry(cellSize * 2.5, cellSize * 2.5),
+  const hues = new Float32Array(count);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      // les rangées proches sont un peu plus hautes : la dalle « monte » vers
+      // le spectateur et se lit mieux en oblique
+      const h = rand(PADS.height[0], PADS.height[1]) * (0.7 + (r / (rows - 1)) * 0.6);
+      const foot = PADS.foot * rand(0.94, 1);
+      hues[i] = TRACKS[r].hue;
+
+      dummy.rotation.set(0, 0, 0);
+      dummy.position.set(padX(c), h / 2, padZ(r));
+      dummy.scale.set(foot, h, foot);
+      dummy.updateMatrix();
+      bodies.setMatrixAt(i, dummy.matrix);
+      bodies.setColorAt(i, color.setHSL(0.6, 0.18, 0.5));
+
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.position.set(padX(c), h + 0.35, padZ(r));
+      dummy.scale.set(foot * 0.94, foot * 0.94, 1);
+      dummy.updateMatrix();
+      roofs.setMatrixAt(i, dummy.matrix);
+      roofs.setColorAt(i, color.setRGB(0.02, 0.03, 0.05));
+
+      dummy.position.set(padX(c), h + 1.4, padZ(r));
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      roofGlow.setMatrixAt(i, dummy.matrix);
+      roofGlow.setColorAt(i, color.setRGB(0, 0, 0));
+    }
+  }
+  group.add(bodies, roofGlow, roofs);
+
+  // ------------------------------------------------------- tête de lecture
+  const playhead = new Mesh(
+    new PlaneGeometry(cell * 1.02, rows * cell + cell),
     new MeshBasicMaterial({
-      map: glowTex,
+      color: 0x9ff0ff,
+      transparent: true,
+      opacity: 0.14,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+      fog: false,
+    })
+  );
+  playhead.rotation.x = -Math.PI / 2;
+  playhead.position.set(padX(0), 0.9, 0);
+  group.add(playhead);
+
+  // Réglette de couleurs des 8 pistes, posée au sol le long de la dalle.
+  const rail = new InstancedMesh(
+    new PlaneGeometry(cell * 0.34, cell * 0.7),
+    new MeshBasicMaterial({
       transparent: true,
       blending: AdditiveBlending,
       depthWrite: false,
@@ -137,78 +146,30 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
       fog: false,
       opacity: 0.85,
     }),
-    count
+    rows
   );
-  bloomHalos.frustumCulled = false;
-
-  const hues = [];
+  rail.frustumCulled = false;
   for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = r * cols + c;
-      const x = cellX(c);
-      const y = cellY(r);
-
-      dummy.rotation.set(0, 0, 0);
-      dummy.scale.set(1, 1, 1);
-
-      dummy.position.set(x, y, frontZ + 0.35);
-      dummy.updateMatrix();
-      wells.setMatrixAt(i, dummy.matrix);
-
-      dummy.position.set(x, y, frontZ + 0.55);
-      dummy.updateMatrix();
-      panes.setMatrixAt(i, dummy.matrix);
-
-      dummy.position.set(x, y, frontZ + 0.25);
-      dummy.updateMatrix();
-      bloomHalos.setMatrixAt(i, dummy.matrix);
-
-      hues.push(TRACKS[r].hue);
-      panes.setColorAt(i, color.setRGB(0.02, 0.03, 0.05));
-      bloomHalos.setColorAt(i, color.setRGB(0, 0, 0));
-    }
+    dummy.rotation.set(-Math.PI / 2, 0, 0);
+    dummy.position.set(padX(0) - cell * 0.85, 0.8, padZ(r));
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    rail.setMatrixAt(r, dummy.matrix);
+    rail.setColorAt(r, color.setHSL(TRACKS[r].hue, 0.9, 0.55));
   }
-  group.add(wells, bloomHalos, panes);
+  group.add(rail);
 
-  // tête de lecture
-  const playhead = new Mesh(
-    new PlaneGeometry(cellSize * 1.1, rows * cellSize * 1.08),
-    new MeshBasicMaterial({
-      color: 0x8fe8ff,
-      transparent: true,
-      opacity: 0.17,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-      fog: false,
-    })
-  );
-  playhead.position.set(cellX(0), HERO.gridCenterY, frontZ + 0.15);
-  group.add(playhead);
-
-  // étiquettes des pistes
-  const labels = new Mesh(
-    new PlaneGeometry(cellSize * 1.6, rows * cellSize),
-    new MeshBasicMaterial({
-      map: makeLabelTexture(rows),
-      transparent: true,
-      blending: AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false,
-      fog: false,
-      opacity: 0.75,
-    })
-  );
-  labels.position.set(cellX(0) - cellSize * 1.3, HERO.gridCenterY, frontZ + 0.4);
-  group.add(labels);
-  const labelLeftEdge = labels.position.x - cellSize * 0.8;
+  for (const mesh of [bodies, roofs, roofGlow, rail]) {
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }
 
   // ------------------------------------------------------------------ état
-  const pattern = Array.from({ length: rows }, () => new Array(cols).fill(0));
-  const flash = new Float32Array(count); // surbrillance transitoire
-  let currentStep = -1;
+  const pattern = Array.from({ length: rows }, () => new Array(PAD_STEPS).fill(0));
+  const groove = deriveGroove(city.text.cells, city.text.bands);
+  const flash = new Float32Array(count);
   let active = false;
-  let kickPulse = 0;
+  let dirty = true;
 
   function paint() {
     for (let i = 0; i < count; i++) {
@@ -216,32 +177,31 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
       const c = i % cols;
       const on = pattern[r][c];
       const f = flash[i];
-      const base = on ? 1.15 : 0.06;
-      const gain = base + f * 3.2;
+      const gain = (on ? 0.95 : 0.05) + f * 2.8;
 
-      color.setHSL(hues[i], on || f > 0.02 ? 0.95 : 0.5, 0.55).multiplyScalar(gain);
-      panes.setColorAt(i, color);
+      color.setHSL(hues[i], on || f > 0.02 ? 0.95 : 0.4, 0.55).multiplyScalar(gain);
+      roofs.setColorAt(i, color);
 
-      const halo = on ? 0.28 + f * 1.6 : f * 1.1;
+      const halo = (on ? 0.22 : 0) + f * 1.3;
       color.setHSL(hues[i], 1, 0.55).multiplyScalar(halo);
-      bloomHalos.setColorAt(i, color);
+      roofGlow.setColorAt(i, color);
     }
-    panes.instanceColor.needsUpdate = true;
-    bloomHalos.instanceColor.needsUpdate = true;
+    roofs.instanceColor.needsUpdate = true;
+    roofGlow.instanceColor.needsUpdate = true;
   }
 
   // ------------------------------------------------------ saisie (tap only)
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   let press = null;
-  const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
 
-  function pickCell(clientX, clientY) {
+  function pickPad(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(ndc, camera);
-    const hits = raycaster.intersectObject(wells, false);
+    // on vise les toits, mais on tolère un doigt qui accroche la façade
+    const hits = raycaster.intersectObjects([roofs, bodies], false);
     if (!hits.length) return -1;
     return hits[0].instanceId ?? -1;
   }
@@ -252,14 +212,8 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
   }
 
   function onMove(e) {
-    if (!active) return;
-    const rect = canvas.getBoundingClientRect();
-    // léger parallaxe : la façade respire sans gêner la visée
-    parallax.tx = clamp(((e.clientX - rect.left) / rect.width - 0.5) * 7, -4, 4);
-    parallax.ty = clamp(((e.clientY - rect.top) / rect.height - 0.5) * -5, -3, 3);
-    if (press && press.id === e.pointerId) {
-      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 12) press = null;
-    }
+    if (!active || !press || press.id !== e.pointerId) return;
+    if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 14) press = null;
   }
 
   function onUp(e) {
@@ -267,17 +221,18 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
     const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
     const held = performance.now() - press.t;
     press = null;
-    if (moved > 12 || held > 600) return;
+    if (moved > 14 || held > 600) return;
 
-    const i = pickCell(e.clientX, e.clientY);
+    const i = pickPad(e.clientX, e.clientY);
     if (i < 0) return;
     const r = (i / cols) | 0;
     const c = i % cols;
     pattern[r][c] = pattern[r][c] ? 0 : 1;
     if (pattern[r][c]) {
       flash[i] = 1;
-      audio.playTrack(r, undefined, 0.9);
+      audio.playPad(r, undefined, 0.9);
     }
+    dirty = true;
     paint();
     hud.hint.classList.remove('show');
   }
@@ -289,70 +244,81 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
 
   // ---------------------------------------------------------------- caméra
 
+  const localPos = new Vector3();
+  const localTarget = new Vector3();
+
   /**
-   * Pose exacte de la caméra face à la grille, calculée pour l'aspect réel.
-   * Le bandeau des noms de pistes déborde à gauche : on recentre dessus pour
-   * qu'il ne soit pas rogné en 9:16.
+   * Pose de survol, exprimée dans le repère tourné de la ville puis ramenée
+   * en coordonnées monde. `sway` fait respirer le cadrage sans fausser la
+   * visée : le lancer de rayon utilise la caméra réelle.
    */
-  function framing(aspect) {
-    const right = (cols * cellSize) / 2;
-    const left = labelLeftEdge;
-    const centerX = (left + right) / 2;
-    const halfW = (right - left) / 2;
-    const halfH = (rows * cellSize) / 2;
+  function framing(aspect, sway = 0) {
+    const az = Math.sin(sway) * AERIAL.swayAzimuth;
+    const el = AERIAL.elevation + Math.cos(sway * 0.7) * AERIAL.swayElevation;
 
+    // recul minimal pour que le mot tienne dans la largeur
     const vFov = (camera.fov * Math.PI) / 180;
-    const needByWidth = (halfW * 1.14) / (Math.tan(vFov / 2) * Math.max(aspect, 0.2));
-    const needByHeight = (halfH * 1.5) / Math.tan(vFov / 2);
-    const dist = Math.max(needByWidth, needByHeight, 60);
+    const halfW = city.fieldSize.w / 2;
+    const need = (halfW * 1.1) / (Math.tan(vFov / 2) * Math.max(aspect, 0.2));
+    const dist = Math.max(AERIAL.distance, need);
 
-    const x = HERO.position[0] + centerX;
+    localTarget.set(0, AERIAL.pivotY, AERIAL.pivotZ);
+    localPos.set(
+      localTarget.x + dist * Math.cos(el) * Math.sin(az),
+      localTarget.y + dist * Math.sin(el),
+      localTarget.z + dist * Math.cos(el) * Math.cos(az)
+    );
+
     return {
-      position: [x, HERO.gridCenterY, HERO.position[2] + frontZ + dist],
-      target: [x, HERO.gridCenterY, HERO.position[2]],
+      position: city.root.localToWorld(localPos.clone()),
+      target: city.root.localToWorld(localTarget.clone()),
     };
   }
 
-  function applyCamera(aspect) {
-    const f = framing(aspect);
+  function applyCamera(aspect, sway) {
+    const f = framing(aspect, sway);
     camera.up.set(0, 1, 0);
-    camera.position.set(f.position[0] + parallax.x, f.position[1] + parallax.y, f.position[2]);
-    camera.lookAt(f.target[0], f.target[1], f.target[2]);
+    camera.position.copy(f.position);
+    camera.lookAt(f.target);
   }
 
   // ---------------------------------------------------------------- boucle
+  let sway = 0;
 
   function update(dt, aspect) {
-    parallax.x += (parallax.tx - parallax.x) * Math.min(1, dt * 3.2);
-    parallax.y += (parallax.ty - parallax.y) * Math.min(1, dt * 3.2);
+    sway += dt * ((Math.PI * 2) / AERIAL.swayPeriod);
 
-    let dirty = false;
     for (let i = 0; i < count; i++) {
       if (flash[i] > 0.001) {
-        flash[i] = Math.max(0, flash[i] - dt * 3.4);
+        flash[i] = Math.max(0, flash[i] - dt * 3.6);
         dirty = true;
       }
     }
-    if (dirty) paint();
+    if (dirty) {
+      paint();
+      dirty = false;
+    }
 
-    kickPulse = Math.max(0, kickPulse - dt * 2.6);
-    crown.material.color.setRGB(0.14 + kickPulse * 2, 0.9 + kickPulse, 1 + kickPulse * 1.4);
-    crownHalo.material.opacity = 0.28 + kickPulse * 0.7;
+    playhead.material.opacity = Math.max(0.06, playhead.material.opacity - dt * 0.5);
 
-    if (active) applyCamera(aspect);
+    if (active) applyCamera(aspect, sway);
   }
 
-  /** Appelé par le séquenceur quand un pas tombe. */
+  /**
+   * Un pas de la mesure : le mot avance d'une colonne, les pads d'un huitième.
+   * @param {number} step 0..15
+   */
   function onStep(step) {
-    currentStep = step;
-    playhead.position.x = cellX(step);
+    const g = groove[step];
+    city.pulseColumn(step, g && (g.kick || g.bass) ? 1 : 0.55);
+
+    const padStep = step % PAD_STEPS;
+    playhead.position.x = padX(padStep);
+    playhead.material.opacity = 0.32;
     for (let r = 0; r < rows; r++) {
-      if (pattern[r][step]) {
-        flash[r * cols + step] = 1;
-        if (TRACKS[r].kind === 'kick') kickPulse = 1;
-      }
+      if (pattern[r][padStep]) flash[r * cols + padStep] = 1;
     }
-    paint();
+    dirty = true;
   }
 
   paint();
@@ -360,20 +326,26 @@ export function createLevel2({ scene, camera, canvas, audio, hud }) {
   return {
     group,
     pattern,
+    groove,
     framing,
     applyCamera,
     update,
     onStep,
-    get currentStep() { return currentStep; },
-    setActive(v) { active = v; },
+    get sway() { return sway; },
+    setActive(v) {
+      active = v;
+      if (!v) city.stopSweep();
+    },
     clear() {
       for (let r = 0; r < rows; r++) pattern[r].fill(0);
+      dirty = true;
       paint();
     },
     load(source) {
       for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) pattern[r][c] = source[r]?.[c] ? 1 : 0;
+        for (let c = 0; c < PAD_STEPS; c++) pattern[r][c] = source[r]?.[c] ? 1 : 0;
       }
+      dirty = true;
       paint();
     },
     loadDemo() { this.load(DEMO_PATTERN); },
