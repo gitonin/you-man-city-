@@ -1,31 +1,38 @@
-import { SHIP } from './config.js';
+import { INPUT } from './config.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const DEG = Math.PI / 180;
 
 /**
- * Entrées du pilote.
+ * Les commandes.
  *
- * Deux gestes, pas un de plus : **incliner** l'appareil pour la direction,
- * **garder le doigt posé** pour accélérer. Le clavier et le glissement au
- * doigt existent uniquement pour pouvoir essayer le jeu sans gyroscope.
+ * Direction : l'inclinaison de l'appareil. Accélération : une manette au
+ * doigt — on glisse vers le haut pour mettre les gaz, vers le bas pour lever
+ * le pied, et la valeur reste où on l'a laissée. Double appui : turbo.
+ *
+ * Clavier et glissement horizontal n'existent que pour pouvoir essayer sans
+ * gyroscope ; ils ne sont pas le mode nominal.
  */
 export function createControls(surface) {
+  const settings = {
+    /** Multiplie le sens de l'inclinaison : l'utilisateur peut l'inverser. */
+    tiltSign: INPUT.tiltSign,
+    tiltRange: INPUT.tiltRange,
+  };
+
   const state = {
-    steer: 0,        // -1 .. 1
-    thrust: false,
-    /** Source réellement utilisée : 'gyro' | 'touch' | 'keys'. */
+    steer: 0,
+    throttle: 0,
+    turboRequested: false,
     source: 'keys',
     gyroAvailable: false,
     gyroEnabled: false,
-    /** Inclinaison neutre, capturée au moment où le gyro est activé. */
     calibration: null,
     rawTilt: 0,
   };
 
-  // ------------------------------------------------------------- gyroscope
   let lastGamma = null;
 
+  // ------------------------------------------------------------- gyroscope
   function onOrientation(e) {
     if (e.gamma == null) return;
     state.gyroAvailable = true;
@@ -34,14 +41,14 @@ export function createControls(surface) {
 
     if (state.calibration === null) state.calibration = e.gamma;
     let tilt = e.gamma - state.calibration;
-    // L'appareil peut basculer d'un repère à l'autre en passant la verticale.
+    // l'appareil peut sauter d'un repère à l'autre en passant la verticale
     if (tilt > 180) tilt -= 360;
     if (tilt < -180) tilt += 360;
 
     state.rawTilt = tilt;
-    const dead = SHIP.tiltDeadzone;
+    const dead = INPUT.tiltDeadzone;
     const live = Math.abs(tilt) < dead ? 0 : Math.sign(tilt) * (Math.abs(tilt) - dead);
-    state.steer = clamp(live / (SHIP.tiltRange - dead), -1, 1);
+    state.steer = clamp(live / (settings.tiltRange - dead), -1, 1) * settings.tiltSign;
     state.source = 'gyro';
   }
 
@@ -63,37 +70,62 @@ export function createControls(surface) {
     return true;
   }
 
-  /** Remet l'inclinaison courante comme position neutre. */
-  function recalibrate() {
-    state.calibration = lastGamma;
-  }
+  const recalibrate = () => { state.calibration = lastGamma; };
 
-  // ------------------------------------------------------------- doigt
-  const pointers = new Map();
-  let dragOrigin = null;
+  // ------------------------------------------------------------------ doigt
+  /** @type {Map<number, {x:number, y:number, throttle:number, steering:boolean}>} */
+  const touches = new Map();
+  let lastTapTime = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
+
+  const isSteeringZone = (clientX) => {
+    if (state.gyroEnabled) return false;
+    const rect = surface.getBoundingClientRect();
+    return clientX - rect.left < rect.width * 0.5;
+  };
 
   function onDown(e) {
-    pointers.set(e.pointerId, e.clientX);
-    state.thrust = true;
-    if (!state.gyroEnabled) dragOrigin = e.clientX;
     surface.setPointerCapture?.(e.pointerId);
+    const steering = isSteeringZone(e.clientX);
+    touches.set(e.pointerId, {
+      x: e.clientX, y: e.clientY, throttle: state.throttle, steering,
+    });
+
+    const now = performance.now();
+    if (
+      now - lastTapTime < INPUT.doubleTapMs
+      && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < INPUT.doubleTapPx
+    ) {
+      state.turboRequested = true;
+      lastTapTime = 0;
+    } else {
+      lastTapTime = now;
+      lastTapX = e.clientX;
+      lastTapY = e.clientY;
+    }
   }
 
   function onMove(e) {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, e.clientX);
-    if (state.gyroEnabled || dragOrigin === null) return;
+    const t = touches.get(e.pointerId);
+    if (!t) return;
     const rect = surface.getBoundingClientRect();
-    state.steer = clamp((e.clientX - dragOrigin) / (rect.width * 0.28), -1, 1);
-    state.source = 'touch';
+
+    if (t.steering) {
+      state.steer = clamp((e.clientX - t.x) / (rect.width * 0.28), -1, 1);
+      state.source = 'touch';
+      return;
+    }
+    // manette : vers le haut on accélère
+    const travel = rect.height * INPUT.throttleTravel;
+    state.throttle = clamp(t.throttle + (t.y - e.clientY) / travel, 0, 1);
   }
 
   function onUp(e) {
-    pointers.delete(e.pointerId);
-    if (pointers.size) return;
-    state.thrust = false;
-    dragOrigin = null;
-    if (!state.gyroEnabled) state.steer = 0;
+    const t = touches.get(e.pointerId);
+    touches.delete(e.pointerId);
+    // la manette garde sa position ; la direction au doigt, elle, se recentre
+    if (t && t.steering && ![...touches.values()].some((o) => o.steering)) state.steer = 0;
   }
 
   surface.addEventListener('pointerdown', onDown, { passive: true });
@@ -101,33 +133,71 @@ export function createControls(surface) {
   surface.addEventListener('pointerup', onUp, { passive: true });
   surface.addEventListener('pointercancel', onUp, { passive: true });
 
-  // ------------------------------------------------------------- clavier
+  // ---------------------------------------------------------------- clavier
   const keys = new Set();
-  const onKey = (down) => (e) => {
-    const k = e.key.toLowerCase();
-    if (!['arrowleft', 'arrowright', 'a', 'd', 'q', ' ', 'arrowup', 'w', 'z'].includes(k)) return;
-    e.preventDefault();
-    if (down) keys.add(k); else keys.delete(k);
+  const WATCHED = [
+    'arrowleft', 'arrowright', 'arrowup', 'arrowdown',
+    'a', 'd', 'q', 'w', 's', 'z', ' ', 'shift',
+  ];
 
+  function applyKeys() {
     const left = keys.has('arrowleft') || keys.has('a') || keys.has('q');
     const right = keys.has('arrowright') || keys.has('d');
-    if (!state.gyroEnabled) {
+    if (!state.gyroEnabled && (left || right || state.source === 'keys')) {
       state.steer = (right ? 1 : 0) - (left ? 1 : 0);
       if (left || right) state.source = 'keys';
     }
-    const go = keys.has(' ') || keys.has('arrowup') || keys.has('w') || keys.has('z');
-    if (go || !pointers.size) state.thrust = go || pointers.size > 0;
-  };
-  window.addEventListener('keydown', onKey(true));
-  window.addEventListener('keyup', onKey(false));
+  }
+
+  function onKeyDown(e) {
+    const k = e.key.toLowerCase();
+    if (!WATCHED.includes(k)) return;
+    e.preventDefault();
+    keys.add(k);
+    if (k === 'shift') state.turboRequested = true;
+    applyKeys();
+  }
+  function onKeyUp(e) {
+    const k = e.key.toLowerCase();
+    if (!WATCHED.includes(k)) return;
+    e.preventDefault();
+    keys.delete(k);
+    applyKeys();
+  }
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+
+  /** Appelé une fois par image : entretient les commandes continues. */
+  function tick(dt) {
+    const up = keys.has('arrowup') || keys.has('w') || keys.has('z') || keys.has(' ');
+    const down = keys.has('arrowdown') || keys.has('s');
+    if (up) state.throttle = clamp(state.throttle + dt * 1.8, 0, 1);
+    if (down) state.throttle = clamp(state.throttle - dt * 2.2, 0, 1);
+  }
+
+  /** Le turbo ne vaut que pour une image. */
+  function consumeTurbo() {
+    const v = state.turboRequested;
+    state.turboRequested = false;
+    return v;
+  }
+
+  function reset() {
+    state.throttle = 0;
+    state.steer = 0;
+    state.turboRequested = false;
+    touches.clear();
+  }
 
   return {
     state,
+    settings,
     enableGyro,
     recalibrate,
+    tick,
+    consumeTurbo,
+    reset,
     get steer() { return state.steer; },
-    get thrust() { return state.thrust; },
-    /** Inclinaison brute en degrés — sert au réglage à l'écran. */
-    get tilt() { return state.rawTilt * DEG; },
+    get throttle() { return state.throttle; },
   };
 }

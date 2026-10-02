@@ -65,13 +65,13 @@ const DIM = 'rgba(160, 190, 215, 0.55)';
 
 const pad2 = (n) => String(Math.floor(n)).padStart(2, '0');
 
-/** mm:ss.cc, découpé pour pouvoir afficher les centièmes en petit. */
+/** mm:ss.cc, découpé pour afficher les centièmes en petit. */
 function splitTime(seconds) {
   const s = Math.max(0, seconds);
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  const cs = Math.floor((s * 100) % 100);
-  return { main: `${m}:${pad2(sec)}`, frac: pad2(cs) };
+  return {
+    main: `${Math.floor(s / 60)}:${pad2(s % 60)}`,
+    frac: pad2((s * 100) % 100),
+  };
 }
 
 export function createHud() {
@@ -94,7 +94,6 @@ export function createHud() {
     ctx.imageSmoothingEnabled = false;
   }
 
-  /** Largeur qu'occupera `text` à l'échelle `scale`. */
   const measure = (text, scale) => text.length * (GW + 1) * scale - scale;
 
   function write(text, x, y, scale, color) {
@@ -118,7 +117,6 @@ export function createHud() {
   const writeRight = (text, right, y, scale, color) =>
     write(text, right - measure(text, scale), y, scale, color);
 
-  /** Panneau sombre derrière un bloc de texte, comme sur les HUD d'époque. */
   function panel(x, y, w, h, alpha = 0.55) {
     ctx.fillStyle = `rgba(8, 14, 20, ${alpha})`;
     ctx.fillRect(x, y, w, h);
@@ -126,14 +124,14 @@ export function createHud() {
 
   /**
    * @param {object} v
-   * @param {number} v.lap
-   * @param {number} v.laps
-   * @param {number} v.lapTime
-   * @param {number} v.bestLap
-   * @param {number} v.totalTime
+   * @param {number} v.lap, v.laps, v.rank, v.field
+   * @param {number} v.lapTime, v.bestLap, v.totalTime
    * @param {number} v.speed      affichée telle quelle
    * @param {number} v.shield     0..100
+   * @param {number} v.throttle   0..1
    * @param {number} v.boost      0..1
+   * @param {number} v.turbo      0..1
+   * @param {number} v.pulse      battement de la musique, 0..1
    * @param {string} [v.center]   gros message centré
    * @param {string} [v.sub]      ligne sous le message
    * @param {boolean} [v.bare]    n'affiche que le message : écran de titre
@@ -142,38 +140,60 @@ export function createHud() {
     const W = canvas.width;
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);
-    if (v.bare && !v.center) {
-      texture.needsUpdate = true;
-      return;
-    }
 
-    // Un « pixel » de fonte vaut `m` pixels internes ; les gros chiffres en
-    // valent trois fois plus. Calé sur la largeur pour tenir sur tout écran.
     const m = Math.max(1, Math.floor(W / 150));
     const big = m * 3;
     const pad = 9 * m;
     // le bombement du tube repousse les coins : le bas a besoin de plus d'air
     const padBottom = 20 * m;
+    const rightEdge = W - pad;
+
+    if (v.bare) {
+      if (v.center) drawCenter(v, W, H, m);
+      texture.needsUpdate = true;
+      return;
+    }
 
     // ---------------------------------------------------------- bandeau haut
     const lapText = `${Math.min(v.lap + 1, v.laps)}/${v.laps}`;
-    panel(pad, pad, measure(lapText, big) + 6 * m, 7 * big + 6 * m);
+    const posText = `POS ${v.rank}/${v.field}`;
+    panel(
+      pad, pad,
+      Math.max(measure(lapText, big), measure(posText, m)) + 6 * m,
+      7 * big + 11 * m + 8 * m
+    );
     write('LAP', pad + 3 * m, pad + 2 * m, m, DIM);
-    write(lapText, pad + 3 * m, pad + 2 * m + 8 * m, big, INK);
+    write(lapText, pad + 3 * m, pad + 10 * m, big, INK);
+    write(posText, pad + 3 * m, pad + 7 * big + 12 * m, m,
+      v.rank === 1 ? CYAN : 'rgba(205, 224, 244, 0.85)');
 
     const tt = splitTime(v.totalTime);
-    const rightEdge = W - pad;
     const mainW = measure(tt.main, big);
-    panel(rightEdge - mainW - measure(tt.frac, m) - 7 * m, pad, mainW + measure(tt.frac, m) + 7 * m, 7 * big + 4 * m);
+    const fracW = measure(tt.frac, m);
+    panel(rightEdge - mainW - fracW - 7 * m, pad, mainW + fracW + 7 * m, 7 * big + 4 * m);
     writeRight(tt.frac, rightEdge - 2 * m, pad + 9 * m, m, CYAN);
-    writeRight(tt.main, rightEdge - measure(tt.frac, m) - 4 * m, pad + 2 * m, big, INK);
+    writeRight(tt.main, rightEdge - fracW - 4 * m, pad + 2 * m, big, INK);
+
+    // ------------------------------------------------- manette, au bord droit
+    const thrH = Math.round(H * 0.26);
+    const thrY = Math.round(H * 0.36);
+    const thrW = 5 * m;
+    const thrX = W - pad - thrW;
+    ctx.fillStyle = 'rgba(8, 14, 20, 0.6)';
+    ctx.fillRect(thrX, thrY, thrW, thrH);
+    const fillH = Math.round(thrH * Math.max(0, Math.min(1, v.throttle)));
+    ctx.fillStyle = v.turbo > 0 ? AMBER : v.throttle > 0.95 ? '#b9f6ff' : CYAN;
+    ctx.fillRect(thrX + 1, thrY + thrH - fillH + 1, thrW - 2, Math.max(0, fillH - 2));
+    // graduations
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    for (let k = 1; k < 4; k++) ctx.fillRect(thrX, thrY + (thrH * k) / 4, thrW, 1);
+    write('T', thrX + m, thrY - 8 * m, m, DIM);
 
     // ---------------------------------------------------------- bandeau bas
     const bottom = H - padBottom;
-
-    // jauge de bouclier
     const barH = 4 * m;
     const barY = bottom - barH;
+
     ctx.fillStyle = 'rgba(8, 14, 20, 0.7)';
     ctx.fillRect(pad, barY, W - pad * 2, barH);
     const fill = Math.max(0, Math.min(1, v.shield / 100)) * (W - pad * 2 - 2);
@@ -183,24 +203,23 @@ export function createHud() {
     ctx.fillStyle = grad;
     ctx.fillRect(pad + 1, barY + 1, fill, barH - 2);
 
-    // jauge de survitesse, collée au-dessus
-    if (v.boost > 0) {
-      ctx.fillStyle = AMBER;
-      ctx.fillRect(pad, barY - 2 * m, (W - pad * 2) * v.boost, m);
+    if (v.boost > 0 || v.turbo > 0) {
+      ctx.fillStyle = v.turbo > 0 ? '#fff0c0' : AMBER;
+      ctx.fillRect(pad, barY - 2 * m, (W - pad * 2) * Math.max(v.boost, v.turbo), m);
     }
 
     // En portrait, vitesse et chrono ne tiennent pas sur la même ligne : on
     // empile, vitesse en bas puisque c'est elle qu'on surveille.
+    const speedText = v.speed.toFixed(2);
     const speedY = barY - 4 * m - 7 * big;
-    writeRight(v.speed.toFixed(2), rightEdge, speedY, big, INK);
-    writeRight('KM/H', rightEdge - measure(v.speed.toFixed(2), big) - 3 * m, speedY + 8 * m, m, DIM);
+    writeRight(speedText, rightEdge, speedY, big, INK);
+    writeRight('KM/H', rightEdge - measure(speedText, big) - 3 * m, speedY + 8 * m, m, DIM);
 
     const lt = splitTime(v.lapTime);
     const lapY = speedY - 3 * m - 7 * big;
     write(lt.main, pad, lapY, big, INK);
     write(lt.frac, pad + measure(lt.main, big) + 3 * m, lapY + 8 * m, m, CYAN);
 
-    // rangée des petites légendes, au-dessus
     const smallY = lapY - 9 * m;
     if (v.bestLap) {
       const bl = splitTime(v.bestLap);
@@ -208,21 +227,28 @@ export function createHud() {
     }
     writeRight(`${v.shield.toFixed(1)} SHIELD`, rightEdge, smallY, m, DIM);
 
-    // ---------------------------------------------------------- message central
-    if (v.center) {
-      const scale = m * 4;
-      const w = measure(v.center, scale);
-      const y = Math.round(H * 0.4);
-      ctx.fillStyle = 'rgba(6, 10, 16, 0.5)';
-      ctx.fillRect(0, y - 4 * m, W, 7 * scale + 8 * m);
-      write(v.center, Math.round((W - w) / 2), y, scale, v.center === 'GO' ? CYAN : INK);
-      if (v.sub) {
-        const sw = measure(v.sub, m);
-        write(v.sub, Math.round((W - sw) / 2), y + 7 * scale + 2 * m, m, DIM);
-      }
+    // battement : deux filets qui pulsent sur le tempo du morceau
+    if (v.pulse > 0.01) {
+      ctx.fillStyle = `rgba(95, 240, 255, ${0.1 + v.pulse * 0.45})`;
+      ctx.fillRect(0, 0, W, m);
+      ctx.fillRect(0, H - m, W, m);
     }
 
+    if (v.center) drawCenter(v, W, H, m);
     texture.needsUpdate = true;
+  }
+
+  function drawCenter(v, W, H, m) {
+    const scale = m * 4;
+    const w = measure(v.center, scale);
+    const y = Math.round(H * 0.4);
+    ctx.fillStyle = 'rgba(6, 10, 16, 0.5)';
+    ctx.fillRect(0, y - 4 * m, W, 7 * scale + 8 * m);
+    write(v.center, Math.round((W - w) / 2), y, scale, v.center === 'GO' ? CYAN : INK);
+    if (v.sub) {
+      const sw = measure(v.sub, m);
+      write(v.sub, Math.round((W - sw) / 2), y + 7 * scale + 2 * m, m, DIM);
+    }
   }
 
   return { canvas, texture, draw, resize };

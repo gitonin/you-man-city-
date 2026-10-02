@@ -1,8 +1,8 @@
 /**
- * REBORN — réglages.
+ * REBORN — réglages généraux.
  *
- * Tout ce qui se règle à l'oreille ou au pouce est ici. Le reste du code
- * n'invente aucune constante de gameplay.
+ * Les circuits et leurs ambiances vivent dans `themes.js` ; ici ne restent que
+ * les constantes communes à toutes les courses.
  */
 
 /** Rendu : on travaille en basse définition, comme la machine d'origine. */
@@ -14,95 +14,88 @@ export const RENDER = {
   fov: 68,
   near: 0.6,
   far: 2600,
-  fogNear: 150,
-  fogFar: 820,
   /** Plafond du devicePixelRatio pour le passage final plein écran. */
   maxPixelRatio: 2,
-};
-
-/** Palette : bleus sales, néons, et les couleurs de corruption du datamosh. */
-export const PALETTE = {
-  sky: 0x16222e,
-  fog: 0x16222e,
-  horizon: 0x2a3f4e,
-  road: 0x6b737a,
-  wall: 0x39434d,
-  accent: 0x3cf0ff,
-  hot: 0xff2e6b,
-  boost: 0xffa023,
-};
-
-/** Le circuit : généré à partir d'une poignée de points de contrôle. */
-export const TRACK = {
-  /** Demi-largeur de la piste. Le vaisseau en fait 1.6 de large. */
-  halfWidth: 13,
-  wallHeight: 7.5,
-  /** Nombre d'échantillons sur toute la boucle : la finesse du ruban. */
-  samples: 1500,
-  /** Longueur d'un carreau de texture le long de la piste. */
-  tileLength: 26,
-  /** Roulis dans les virages, en radians par unité de courbure. */
-  bankStrength: 46,
-  bankMax: 0.52,
 };
 
 /** Pilotage du vaisseau. Vitesses en unités par seconde. */
 export const SHIP = {
   maxSpeed: 330,
   boostSpeed: 430,
-  /** Poussée doigt appuyé, et frein moteur doigt levé. */
-  thrust: 118,
-  coast: 46,
+  /** Atteinte uniquement au double-appui. */
+  turboSpeed: 520,
+  /** Poussée à plein régime, et frein moteur manette au ralenti. */
+  thrust: 128,
+  brake: 150,
   /** Traînée quadratique : fixe la vitesse de croisière. */
   drag: 0.00052,
-  /** Autorité du gyro sur la dérive latérale. */
+  /** Autorité de la direction sur la dérive latérale. */
   steerForce: 92,
   /** Poussée vers l'extérieur du virage : le dévers se paie. */
   corneringDrift: 0.26,
   steerDamp: 3.1,
-  /** Inclinaison max de l'appareil prise en compte, en degrés. */
-  tiltRange: 26,
-  /** Zone morte du gyro, en degrés. */
-  tiltDeadzone: 1.8,
   halfWidth: 2.4,
   /** Perte de vitesse et de bouclier contre un mur. */
   wallBounce: 0.45,
   wallSpeedLoss: 0.82,
   wallDamage: 7,
-  /** Durée et puissance du coup de boost des plaques orange. */
+  /** Accrochage avec un adversaire. */
+  rubDamage: 4,
+  rubSpeedLoss: 0.9,
+  /** Durée du coup de boost des plaques, et du turbo au double-appui. */
   boostDuration: 1.9,
+  turboDuration: 1.3,
   shield: 100,
   /** Flottement du cockpit. */
   hoverAmp: 0.22,
   hoverFreq: 2.7,
 };
 
+/** Commandes. */
+export const INPUT = {
+  /** Inclinaison max de l'appareil prise en compte, en degrés. */
+  tiltRange: 26,
+  tiltDeadzone: 1.8,
+  /** Sens du gyroscope : -1 pour incliner à gauche et tourner à gauche. */
+  tiltSign: -1,
+  /** Course du pavé d'accélération, en fraction de la hauteur d'écran. */
+  throttleTravel: 0.3,
+  /** Fenêtre du double-appui, en millisecondes, et tolérance en pixels. */
+  doubleTapMs: 300,
+  doubleTapPx: 34,
+};
+
 /**
- * Musique : la bande dérape avec le bolide. On coupe `preservesPitch` pour
- * que la hauteur suive la vitesse — c'est l'effet bande magnétique.
+ * Musique. Le morceau est à 119 BPM pile — mesuré sur le fichier, grille
+ * vérifiée du début à la fin —, ce qui permet de caler le jeu dessus sans
+ * analyse temps réel.
  */
 export const MUSIC = {
   src: './assets/reborn.mp3',
-  /** Vitesse de lecture à l'arrêt et à pleine vitesse. */
-  rateIdle: 0.62,
-  rateMax: 1.26,
-  /** Au-delà de la vitesse max (boost), la bande part plus haut. */
-  rateBoost: 1.45,
+  bpm: 119,
+  /** Position du premier temps, en secondes. */
+  beatOffset: 0.0464,
+  /** Vitesse de lecture : à l'arrêt, à plein régime, en survitesse, en turbo. */
+  rateIdle: 0.68,
+  rateMax: 1.22,
+  rateBoost: 1.38,
+  rateTurbo: 1.5,
   /** Lissage du changement de vitesse, en secondes. */
   smoothing: 0.35,
-  volume: 0.85,
+  volume: 0.82,
+  /** Numérisation : profondeur de bits à froid et à chaud. */
+  crushBitsClean: 16,
+  crushBitsDirty: 5,
 };
 
 /** Corruption de l'image. Le glitch est un personnage, pas un accident. */
 export const GLITCH = {
-  /** Niveau de fond, toujours présent. */
   idle: 0.05,
-  /** Part proportionnelle à la vitesse. */
   speedGain: 0.09,
-  /** Pic lors d'un choc, et sa décroissance par seconde. */
+  /** Pic sur le temps fort de chaque mesure. */
+  beatKick: 0.1,
   hitBurst: 0.42,
   hitDecay: 1.8,
-  /** Rafales aléatoires : probabilité par seconde, durée, intensité. */
   burstChance: 0.4,
   burstTime: [0.06, 0.3],
   burstPower: [0.16, 0.5],
@@ -113,6 +106,15 @@ export const GLITCH = {
 /** Course. */
 export const RACE = {
   laps: 3,
-  /** Décompte avant le départ, en secondes. */
   countdown: 3,
+  opponents: 5,
+};
+
+/** Portiques rythmiques : ils battent la mesure et sonnent au passage. */
+export const RHYTHM = {
+  /** Nombre de portiques répartis sur le tour. */
+  gates: 28,
+  /** Gamme des notes déclenchées, en demi-tons depuis do. */
+  scale: [0, 3, 5, 7, 10, 12, 15],
+  baseFreq: 261.63,
 };

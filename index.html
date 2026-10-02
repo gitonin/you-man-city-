@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#05070c" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>REBORN — You Man</title>
-<meta name="description" content="Un antigravité en 3D, format téléphone. On incline pour tourner, on garde le doigt posé pour accélérer, et la bande-son dérape avec le bolide." />
+<title>YOU MAN — REBORN</title>
+<meta name="description" content="Un antigravité en 3D, format téléphone. On incline pour tourner, on glisse pour accélérer, et la bande-son dérape avec le bolide." />
 <link rel="stylesheet" href="./styles.css" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305070c'/%3E%3Cpath d='M4 20h24l-6 6H10z' fill='%235ff0ff'/%3E%3Cpath d='M8 12h16l-3 5H11z' fill='%23ff2e6b'/%3E%3C/svg%3E" />
 <script type="importmap">
@@ -20,49 +20,144 @@
 </head>
 <body>
 
+<!-- Logotype : lettres construites à la main, dans l'esprit des jaquettes
+     d'antigravité des années 90 — très grasses, légèrement penchées, coupées
+     par une fente horizontale. Trois calques superposés font le décrochage. -->
+<svg id="ym-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <clipPath id="ym-slot" clipPathUnits="userSpaceOnUse">
+      <rect x="-40" y="-20" width="600" height="64" />
+      <rect x="-40" y="52" width="600" height="79" />
+    </clipPath>
+    <g id="ym-word" clip-path="url(#ym-slot)">
+      <!-- Y -->
+      <path d="M0,0 L18,0 L34,34 L50,0 L68,0 L43,48 L43,100 L25,100 L25,48 Z" />
+      <!-- O -->
+      <path fill-rule="evenodd" d="M78,16 L94,0 L130,0 L146,16 L146,84 L130,100 L94,100 L78,84 Z
+        M96,22 L102,16 L122,16 L128,22 L128,78 L122,84 L102,84 L96,78 Z" />
+      <!-- U -->
+      <path d="M156,0 L174,0 L174,78 L180,84 L200,84 L206,78 L206,0 L224,0 L224,84 L208,100 L172,100 L156,84 Z" />
+      <!-- M -->
+      <path d="M258,0 L278,0 L292,30 L306,0 L326,0 L326,100 L309,100 L309,36 L297,62 L287,62 L275,36 L275,100 L258,100 Z" />
+      <!-- A -->
+      <path fill-rule="evenodd" d="M362,0 L378,0 L404,100 L386,100 L381,78 L359,78 L354,100 L336,100 Z
+        M363,62 L377,62 L370,30 Z" />
+      <!-- N -->
+      <path d="M414,0 L432,0 L464,58 L464,0 L482,0 L482,100 L464,100 L432,42 L432,100 L414,100 Z" />
+    </g>
+  </defs>
+</svg>
+
 <div id="stage">
   <div id="frame">
     <canvas id="view"></canvas>
 
-    <!-- ============ TITRE ============ -->
-    <section id="intro" class="screen">
+    <!-- ===================== TITRE ===================== -->
+    <section id="screen-title" class="screen">
       <div class="inner">
-        <p class="eyebrow">You Man</p>
-        <h1 class="title" data-text="REBORN"><span>REBORN</span></h1>
-        <p class="blurb">
-          Antigravité. Trois tours.<br />
-          La bande-son dérape avec vous.
-        </p>
+        <div class="wordmark" aria-label="You Man">
+          <svg class="ym" viewBox="-16 -8 514 116" role="img">
+            <use href="#ym-word" class="ym-c" />
+            <use href="#ym-word" class="ym-m" />
+            <use href="#ym-word" class="ym-w" />
+          </svg>
+        </div>
+        <p class="eyebrow">reborn</p>
+        <p class="blurb">Antigravité. Quatre circuits.<br />La bande-son dérape avec vous.</p>
 
-        <ul class="howto">
-          <li><b>Incliner</b> l'appareil — gauche / droite</li>
-          <li><b>Garder le doigt posé</b> — accélérer</li>
-        </ul>
-
-        <button id="btn-start" class="cta">Appuyer pour lancer</button>
-        <p id="gyro-note" class="fineprint">son · gyroscope</p>
+        <div class="menu">
+          <button id="go-select" class="cta">Courir</button>
+          <button id="go-scores" class="cta ghosty">Scores</button>
+          <button id="go-controls" class="cta ghosty">Contrôles</button>
+        </div>
+        <p class="fineprint">You Man — « Reborn » · son requis</p>
       </div>
     </section>
 
-    <!-- ============ ARRIVÉE ============ -->
-    <section id="outro" class="screen" hidden>
+    <!-- ===================== CIRCUITS ===================== -->
+    <section id="screen-select" class="screen" hidden>
+      <div class="inner wide">
+        <p class="eyebrow">choisir un circuit</p>
+        <div id="track-list" class="cards"></div>
+        <button class="cta ghosty back" data-back="title">Retour</button>
+      </div>
+    </section>
+
+    <!-- ===================== SCORES ===================== -->
+    <section id="screen-scores" class="screen" hidden>
+      <div class="inner wide">
+        <p class="eyebrow">meilleurs temps</p>
+        <div id="score-list" class="scores"></div>
+        <div class="row">
+          <button id="wipe-scores" class="cta ghosty small">Effacer</button>
+          <button class="cta ghosty small back" data-back="title">Retour</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== CONTRÔLES ===================== -->
+    <section id="screen-controls" class="screen" hidden>
+      <div class="inner wide">
+        <p class="eyebrow">contrôles</p>
+        <ul class="howto">
+          <li><b>Incliner</b> l'appareil — gauche / droite</li>
+          <li><b>Glisser vers le haut</b> — mettre les gaz</li>
+          <li><b>Glisser vers le bas</b> — lever le pied</li>
+          <li><b>Double appui</b> — turbo</li>
+        </ul>
+        <div class="opts">
+          <button id="opt-invert" class="opt" aria-pressed="false">
+            <span>Sens de l'inclinaison</span><b id="opt-invert-val">normal</b>
+          </button>
+          <button id="opt-sens" class="opt">
+            <span>Sensibilité</span><b id="opt-sens-val">moyenne</b>
+          </button>
+          <button id="opt-sound" class="opt" aria-pressed="true">
+            <span>Son</span><b id="opt-sound-val">activé</b>
+          </button>
+        </div>
+        <p class="fineprint">sans gyroscope : moitié gauche pour diriger, flèches au clavier</p>
+        <button class="cta ghosty back" data-back="title">Retour</button>
+      </div>
+    </section>
+
+    <!-- ===================== PAUSE ===================== -->
+    <section id="screen-pause" class="screen" hidden>
       <div class="inner">
-        <p class="eyebrow">course terminée</p>
-        <h2 class="title small" data-text="FINISH"><span>FINISH</span></h2>
+        <p class="eyebrow">pause</p>
+        <h2 id="pause-track" class="headline">—</h2>
+        <div class="menu">
+          <button id="pause-resume" class="cta">Reprendre</button>
+          <button id="pause-restart" class="cta ghosty">Recommencer</button>
+          <button id="pause-quit" class="cta ghosty">Circuits</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== ARRIVÉE ===================== -->
+    <section id="screen-results" class="screen" hidden>
+      <div class="inner">
+        <p class="eyebrow" id="res-eyebrow">course terminée</p>
+        <h2 id="res-headline" class="headline">FINISH</h2>
         <dl class="results">
+          <div><dt>Place</dt><dd id="res-rank">—</dd></div>
           <div><dt>Total</dt><dd id="res-total">—</dd></div>
           <div><dt>Meilleur tour</dt><dd id="res-best">—</dd></div>
           <div><dt>Vitesse max</dt><dd id="res-top">—</dd></div>
         </dl>
-        <button id="btn-again" class="cta">Recommencer</button>
+        <p id="res-record" class="record" hidden>nouveau record</p>
+        <div class="menu">
+          <button id="res-again" class="cta">Recommencer</button>
+          <button id="res-quit" class="cta ghosty">Circuits</button>
+        </div>
       </div>
     </section>
 
     <!-- commandes discrètes, en course -->
-    <div id="hud-dom" hidden>
-      <button id="btn-center" class="chip" title="Recentrer le gyroscope">
-        recentrer <span id="tilt" class="readout">—</span>
-      </button>
+    <div id="race-chrome" hidden>
+      <button id="btn-pause" class="chip" aria-label="Pause">❚❚</button>
+      <button id="btn-center" class="chip" hidden>recentrer</button>
+      <button id="btn-sound" class="chip" hidden>son coupé — toucher</button>
     </div>
 
     <div id="rotate" hidden><p>Tenir l'appareil<br />à la verticale</p></div>

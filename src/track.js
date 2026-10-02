@@ -1,29 +1,20 @@
 import {
-  BackSide,
-  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   CatmullRomCurve3,
   DoubleSide,
   Group,
-  InstancedMesh,
   Matrix4,
   Mesh,
-  Object3D,
   PlaneGeometry,
-  SphereGeometry,
   Vector3,
 } from 'three';
 
-import { TRACK } from './config.js';
 import { bakeVertexLight, psxMaterial } from './psx.js';
 import {
   makeBillboardTexture,
   makeBoostTexture,
-  makeBuildingTexture,
-  makeGroundTexture,
   makeRoadTexture,
-  makeSkyTexture,
   makeStartTexture,
   makeTunnelTexture,
   makeWallTexture,
@@ -32,49 +23,51 @@ import {
 const UP = new Vector3(0, 1, 0);
 const rand = (a, b) => a + Math.random() * (b - a);
 
+/** Géométrie du ruban, commune à tous les circuits. */
+export const TRACK = {
+  halfWidth: 13,
+  wallHeight: 7.5,
+  samples: 900,
+  tileLength: 26,
+  bankStrength: 46,
+  bankMax: 0.52,
+};
+
 /**
  * Le circuit est une boucle fermée échantillonnée une fois pour toutes. Tout
- * le reste — ruban de piste, murs, voûtes, décor — est extrudé le long de ces
- * échantillons, et le vaisseau s'y repère par une simple abscisse curviligne.
+ * le reste — ruban, murs, voûtes, décor — est extrudé le long de ces
+ * échantillons, et les vaisseaux s'y repèrent par une simple abscisse
+ * curviligne.
  *
  * Travailler en « espace piste » (distance parcourue + écart latéral) rend la
- * conduite et les collisions triviales : deux scalaires, pas de physique à
- * intégrer dans le monde.
+ * conduite, les collisions et l'intelligence des adversaires triviales : deux
+ * scalaires, pas de physique à intégrer dans le monde.
  */
-
-/** Tracé : un anneau déformé, assez lisible pour être mémorisé en deux tours. */
-function controlPoints() {
-  const R = 1080;
+function controlPoints(shape) {
   const points = [];
   const COUNT = 18;
+  const [lobeAmp, lobeK] = shape.lobe;
+  const [wobAmp, wobK] = shape.wobble;
+  const [h1, h2, h3] = shape.hills;
   for (let i = 0; i < COUNT; i++) {
     const a = (i / COUNT) * Math.PI * 2;
-    const radius = R * (1 + 0.3 * Math.sin(a * 2) - 0.15 * Math.cos(a * 3));
-    const y = 34 * Math.sin(a) + 19 * Math.sin(a * 3 + 0.7) - 11 * Math.cos(a * 2);
+    const radius = shape.radius * (1 + lobeAmp * Math.sin(a * lobeK) + wobAmp * Math.cos(a * wobK));
+    const y = h1 * Math.sin(a) + h2 * Math.sin(a * 3 + 0.7) + h3 * Math.cos(a * 2);
     points.push(new Vector3(Math.cos(a) * radius, y, Math.sin(a) * radius));
   }
   return points;
 }
 
-/** Sections couvertes, en fraction de tour. */
-const TUNNELS = [
-  [0.145, 0.265],
-  [0.595, 0.715],
-];
-/** Plaques de survitesse, en fraction de tour. */
-const BOOSTS = [0.07, 0.345, 0.5, 0.79, 0.93];
-
 const inRange = (t, ranges) => ranges.some(([a, b]) => t >= a && t <= b);
 
-export function buildTrack(scene) {
-  const curve = new CatmullRomCurve3(controlPoints(), true, 'catmullrom', 0.5);
+export function buildTrack(scene, theme) {
+  const curve = new CatmullRomCurve3(controlPoints(theme.shape), true, 'catmullrom', 0.5);
 
-  // ------------------------------------------------- échantillonnage du tracé
   const N = TRACK.samples;
   const pos = new Float32Array(N * 3);
   const tan = new Float32Array(N * 3);
-  const nrm = new Float32Array(N * 3); // « haut » de la piste, dévers compris
-  const bin = new Float32Array(N * 3); // travers de la piste
+  const nrm = new Float32Array(N * 3);
+  const bin = new Float32Array(N * 3);
   const dist = new Float32Array(N + 1);
   const bank = new Float32Array(N);
 
@@ -84,9 +77,8 @@ export function buildTrack(scene) {
   const n = new Vector3();
 
   for (let i = 0; i < N; i++) {
-    const u = i / N;
-    curve.getPointAt(u, p);
-    curve.getTangentAt(u, t).normalize();
+    curve.getPointAt(i / N, p);
+    curve.getTangentAt(i / N, t).normalize();
     pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
     tan[i * 3] = t.x; tan[i * 3 + 1] = t.y; tan[i * 3 + 2] = t.z;
   }
@@ -104,7 +96,7 @@ export function buildTrack(scene) {
   dist[N] = total;
 
   // Pas de texture ajusté pour tomber juste sur la boucle : sans ça, une
-  // couture sautait aux yeux à chaque passage sur la ligne.
+  // couture saute aux yeux à chaque passage sur la ligne.
   const roadTile = total / Math.max(1, Math.round(total / TRACK.tileLength));
   const wallTile = total / Math.max(1, Math.round(total / 20));
 
@@ -113,8 +105,7 @@ export function buildTrack(scene) {
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     const cross = tan[i * 3] * tan[j * 3 + 2] - tan[i * 3 + 2] * tan[j * 3];
-    const seg = Math.max(1e-4, dist[i + 1] - dist[i]);
-    raw[i] = (cross / seg) * TRACK.bankStrength;
+    raw[i] = (cross / Math.max(1e-4, dist[i + 1] - dist[i])) * TRACK.bankStrength;
   }
   for (let pass = 0; pass < 28; pass++) {
     for (let i = 0; i < N; i++) {
@@ -126,7 +117,6 @@ export function buildTrack(scene) {
     bank[i] = Math.max(-TRACK.bankMax, Math.min(TRACK.bankMax, raw[i]));
   }
 
-  // repères locaux, dévers appliqué
   for (let i = 0; i < N; i++) {
     t.set(tan[i * 3], tan[i * 3 + 1], tan[i * 3 + 2]);
     b.crossVectors(t, UP).normalize();
@@ -162,7 +152,6 @@ export function buildTrack(scene) {
     const colors = new Float32Array(vertices * 3);
     const indices = [];
 
-    // normale de chaque point du profil, orientée vers le haut par convention
     const faceNormals = profile.map((pt, k) => {
       const prev = profile[Math.max(0, k - 1)];
       const next = profile[Math.min(cols - 1, k + 1)];
@@ -232,14 +221,12 @@ export function buildTrack(scene) {
   const WH = TRACK.wallHeight;
 
   // piste : un seul quad en travers, pour que le placage affine se voie
-  const road = new Mesh(
+  root.add(new Mesh(
     extrude([{ lat: -HW, up: 0, u: 0 }, { lat: HW, up: 0, u: 1 }], { vScale: roadTile }),
-    psxMaterial({ map: makeRoadTexture() })
-  );
-  root.add(road);
+    psxMaterial({ map: makeRoadTexture(theme) })
+  ));
 
-  // murs
-  const wallMat = psxMaterial({ map: makeWallTexture(), side: DoubleSide });
+  const wallMat = psxMaterial({ map: makeWallTexture(theme), side: DoubleSide });
   root.add(
     new Mesh(extrude(
       [{ lat: -HW, up: 0, u: 1 }, { lat: -HW - 0.6, up: WH, u: 0 }],
@@ -251,22 +238,21 @@ export function buildTrack(scene) {
     ), wallMat)
   );
 
-  // voûtes des tunnels
-  const tunnelMat = psxMaterial({ map: makeTunnelTexture(), side: DoubleSide });
+  const tunnelMat = psxMaterial({ map: makeTunnelTexture(theme), side: DoubleSide });
   const ceiling = [
     { lat: -HW - 0.6, up: WH, u: 0 },
     { lat: -HW * 0.62, up: WH + 4.4, u: 0.33 },
     { lat: HW * 0.62, up: WH + 4.4, u: 0.67 },
     { lat: HW + 0.6, up: WH, u: 1 },
   ];
-  for (const [a, z] of TUNNELS) {
+  for (const [a, z] of theme.tunnels) {
     root.add(new Mesh(
       extrude(ceiling, {
         from: Math.floor(a * N),
         to: Math.floor(z * N),
         vScale: 18,
         vAcross: true,
-        tint: 0.72,
+        tint: theme.scenery === 'tube' ? 0.84 : 0.72,
         normalSign: -1,
       }),
       tunnelMat
@@ -287,15 +273,12 @@ export function buildTrack(scene) {
     const bx = bin[i * 3], by = bin[i * 3 + 1], bz = bin[i * 3 + 2];
     const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
     const tx = tan[i * 3], ty = tan[i * 3 + 1], tz = tan[i * 3 + 2];
-    const x = pos[i * 3] + bx * lat + nx * up;
-    const y = pos[i * 3 + 1] + by * lat + ny * up;
-    const z = pos[i * 3 + 2] + bz * lat + nz * up;
     mesh.matrixAutoUpdate = false;
     // colonnes : X = travers, Y = normale, Z = tangente
     mesh.matrix.set(
-      bx, nx, tx, x,
-      by, ny, ty, y,
-      bz, nz, tz, z,
+      bx, nx, tx, pos[i * 3] + bx * lat + nx * up,
+      by, ny, ty, pos[i * 3 + 1] + by * lat + ny * up,
+      bz, nz, tz, pos[i * 3 + 2] + bz * lat + nz * up,
       0, 0, 0, 1
     );
     if (extra) mesh.matrix.multiply(extra);
@@ -304,7 +287,7 @@ export function buildTrack(scene) {
 
   const boostMat = decalMat(makeBoostTexture());
   const boostPads = [];
-  for (const frac of BOOSTS) {
+  for (const frac of theme.boosts) {
     const i = Math.floor(frac * N) % N;
     const quad = new PlaneGeometry(HW * 1.1, 36);
     quad.rotateX(-Math.PI / 2);
@@ -320,78 +303,19 @@ export function buildTrack(scene) {
   place(startLine, 0, 0, 0.14);
   decals.add(startLine);
 
-  // panneaux publicitaires au-dessus des murs
-  const faceTrack = new Matrix4().makeRotationY(Math.PI / 2);
-  const billboardMat = psxMaterial({
-    map: makeBillboardTexture(), vertexColors: false, side: DoubleSide,
-  });
-  for (let k = 0; k < 56; k++) {
-    const i = (Math.floor((k / 56) * N + rand(-16, 16)) + N) % N;
-    if (inRange(i / N, TUNNELS)) continue;
-    const mesh = new Mesh(new PlaneGeometry(28, 9.5), billboardMat);
-    place(mesh, i, (Math.random() < 0.5 ? -1 : 1) * (HW + 1.6), WH + 5, faceTrack);
-    decals.add(mesh);
-  }
-
-  // ------------------------------------------------------------------- décor
-  const sky = new Mesh(
-    new SphereGeometry(1900, 24, 16),
-    psxMaterial({
-      map: makeSkyTexture(),
-      vertexColors: false,
-      snap: false,
-      affine: false,
-      fog: false,
-      side: BackSide,
-      depthWrite: false,
-    })
-  );
-  sky.renderOrder = -10;
-  root.add(sky);
-
-  const groundTex = makeGroundTexture();
-  groundTex.repeat.set(110, 110);
-  const ground = new Mesh(
-    new PlaneGeometry(7000, 7000),
-    psxMaterial({ map: groundTex, vertexColors: false, snap: false })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -80;
-  root.add(ground);
-
-  // tours du fond
-  const TOWERS = 190;
-  const towerGeo = new BoxGeometry(1, 1, 1);
-  {
-    const normals = towerGeo.attributes.normal;
-    const colors = new Float32Array(normals.count * 3);
-    for (let i = 0; i < normals.count; i++) {
-      const [r, g, bb] = bakeVertexLight(
-        normals.getX(i), normals.getY(i), normals.getZ(i), 0.28, 0.5
-      );
-      colors[i * 3] = r; colors[i * 3 + 1] = g; colors[i * 3 + 2] = bb;
+  if (theme.scenery !== 'space') {
+    const faceTrack = new Matrix4().makeRotationY(Math.PI / 2);
+    const billboardMat = psxMaterial({
+      map: makeBillboardTexture(theme), vertexColors: false, side: DoubleSide,
+    });
+    for (let k = 0; k < 56; k++) {
+      const i = (Math.floor((k / 56) * N + rand(-16, 16)) + N) % N;
+      if (inRange(i / N, theme.tunnels)) continue;
+      const mesh = new Mesh(new PlaneGeometry(28, 9.5), billboardMat);
+      place(mesh, i, (Math.random() < 0.5 ? -1 : 1) * (HW + 1.6), WH + 5, faceTrack);
+      decals.add(mesh);
     }
-    towerGeo.setAttribute('color', new BufferAttribute(colors, 3));
   }
-  const towers = new InstancedMesh(towerGeo, psxMaterial({ map: makeBuildingTexture() }), TOWERS);
-  towers.frustumCulled = false;
-  const dummy = new Object3D();
-  for (let k = 0; k < TOWERS; k++) {
-    const i = Math.floor(Math.random() * N);
-    const lat = (Math.random() < 0.5 ? -1 : 1) * rand(50, 560);
-    const h = rand(26, 220);
-    dummy.position.set(
-      pos[i * 3] + bin[i * 3] * lat,
-      pos[i * 3 + 1] - 26 + h / 2,
-      pos[i * 3 + 2] + bin[i * 3 + 2] * lat
-    );
-    dummy.rotation.set(0, rand(0, Math.PI), 0);
-    dummy.scale.set(rand(16, 48), h, rand(16, 48));
-    dummy.updateMatrix();
-    towers.setMatrixAt(k, dummy.matrix);
-  }
-  towers.instanceMatrix.needsUpdate = true;
-  root.add(towers);
 
   // ------------------------------------------------------------- interrogation
 
@@ -402,7 +326,7 @@ export function buildTrack(scene) {
 
   /**
    * Repère de la piste à l'abscisse `s`. Les champs sont réécrits dans l'objet
-   * fourni : cette fonction tourne plusieurs fois par image.
+   * fourni : cette fonction tourne plusieurs fois par image et par vaisseau.
    */
   function frameAt(s, out) {
     const d = wrap(s);
@@ -421,7 +345,7 @@ export function buildTrack(scene) {
     lerp3(nrm, out.normal).normalize();
     lerp3(bin, out.binormal).normalize();
     out.bank = bank[i] + (bank[j] - bank[i]) * f;
-    out.covered = inRange(d / total, TUNNELS);
+    out.covered = inRange(d / total, theme.tunnels);
     return out;
   }
 
@@ -439,22 +363,25 @@ export function buildTrack(scene) {
     const a = wrap(prev);
     const z = wrap(next);
     for (const pad of boostPads) {
-      if (z < a ? (pad.dist >= a || pad.dist <= z) : (pad.dist >= a && pad.dist <= z)) {
-        return true;
-      }
+      if (z < a ? (pad.dist >= a || pad.dist <= z) : (pad.dist >= a && pad.dist <= z)) return true;
     }
     return false;
   }
 
   return {
-    root,
-    curve,
+    root, curve, theme,
     length: total,
     samples: N,
     halfWidth: HW,
+    wallHeight: WH,
+    /** Données brutes : le décor s'y accroche sans refaire le calcul. */
+    raw: { pos, tan, nrm, bin, dist, bank },
+    place,
+    extrude,
     frameAt,
     makeFrame,
     boostCrossed,
-    isCovered: (s) => inRange(wrap(s) / total, TUNNELS),
+    bankAt: (s) => bank[Math.floor((wrap(s) / total) * N) % N],
+    isCovered: (s) => inRange(wrap(s) / total, theme.tunnels),
   };
 }

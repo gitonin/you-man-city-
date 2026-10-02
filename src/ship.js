@@ -19,9 +19,20 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * ruban, et `x`, l'écart par rapport à l'axe. Le monde n'intervient que pour
  * convertir ce couple en position et en orientation.
  */
-export function createShip(track, camera) {
-  const frame = track.makeFrame();
-  const ahead = track.makeFrame();
+const makeFrame = () => ({
+  position: new Vector3(),
+  tangent: new Vector3(),
+  normal: new Vector3(),
+  binormal: new Vector3(),
+  bank: 0,
+  covered: false,
+});
+
+export function createShip(camera) {
+  /** Le circuit change d'une course à l'autre ; le bolide, non. */
+  let track = null;
+  const frame = makeFrame();
+  const ahead = makeFrame();
 
   const state = {
     s: 0,
@@ -30,43 +41,35 @@ export function createShip(track, camera) {
     speed: 0,
     shield: SHIP.shield,
     boost: 0,
+    turbo: 0,
     lap: 0,
     finished: false,
-    /** Temps du tour en cours et meilleur tour, en secondes. */
     lapTime: 0,
     bestLap: 0,
     lastLap: 0,
     totalTime: 0,
-    /** Secousse caméra après un choc, 0..1. */
+    rank: 1,
     shake: 0,
     hitFlash: 0,
-    /** Vrai pendant l'image où l'on vient de toucher un mur. */
     hitThisFrame: false,
     boostedThisFrame: false,
+    turboThisFrame: false,
     lapThisFrame: false,
   };
 
-  const limit = track.halfWidth - SHIP.halfWidth;
 
   // ------------------------------------------------------------------ cockpit
   const cockpit = new Group();
   camera.add(cockpit);
 
   let cockpitMesh = null;
+  let rimMesh = null;
   const cockpitMat = psxMaterial({
-    color: 0xffffff,
-    vertexColors: true,
-    affine: false,
-    fog: false,
+    color: 0xffffff, vertexColors: true, affine: false, fog: false,
   });
   const rimMat = psxMaterial({
-    color: 0x14525e,
-    vertexColors: false,
-    affine: false,
-    fog: false,
-    toneMapped: false,
+    color: 0x14525e, vertexColors: false, affine: false, fog: false, toneMapped: false,
   });
-  let rimMesh = null;
 
   /**
    * Le cockpit est dessiné en proportion du champ de vision : quel que soit
@@ -77,22 +80,19 @@ export function createShip(track, camera) {
     const hh = Math.tan((fovDeg * Math.PI) / 360) * d;
     const hw = hh * aspect;
 
-    // silhouette en (u, v), normalisée sur la demi-largeur / demi-hauteur
     const L = [
       [-1.30, -1.30], // hors cadre, en bas à gauche
       [-1.30, -0.22], // montant qui file vers le bord gauche
       [-0.55, -0.62], // épaule intérieure
       [-0.11, -0.80], // pointe centrale
     ];
-    const mirror = (pt) => [-pt[0], pt[1]];
-    const R = L.map(mirror);
+    const R = L.map((pt) => [-pt[0], pt[1]]);
 
     const verts = [];
     const shades = [];
     const pushTri = (a, b, c) => {
       for (const pt of [a, b, c]) {
         verts.push(pt[0] * hw, pt[1] * hh, -d);
-        // dégradé : le bas du cockpit reste dans l'ombre
         const k = 0.016 + Math.max(0, pt[1] + 1.1) * 0.075;
         shades.push(k * 0.78, k * 0.95, k * 1.3);
       }
@@ -102,7 +102,6 @@ export function createShip(track, camera) {
     pushTri(L[0], L[2], L[3]);
     pushTri(R[0], R[2], R[1]);
     pushTri(R[0], R[3], R[2]);
-    // plancher entre les deux pointes
     pushTri(L[0], L[3], R[3]);
     pushTri(L[0], R[3], R[0]);
 
@@ -130,11 +129,10 @@ export function createShip(track, camera) {
       const len = Math.hypot(dx, dy) || 1;
       const ox = (-dy / len) * w;
       const oy = (dx / len) * w;
-      const quad = [
+      for (const pt of [
         [a[0], a[1]], [b[0], b[1]], [b[0] + ox, b[1] + oy],
         [a[0], a[1]], [b[0] + ox, b[1] + oy], [a[0] + ox, a[1] + oy],
-      ];
-      for (const pt of quad) rim.push(pt[0] * hw, pt[1] * hh, -d + 0.004);
+      ]) rim.push(pt[0] * hw, pt[1] * hh, -d + 0.004);
     }
     const rimGeo = new BufferGeometry();
     rimGeo.setAttribute('position', new BufferAttribute(new Float32Array(rim), 3));
@@ -154,44 +152,62 @@ export function createShip(track, camera) {
   let hoverPhase = 0;
 
   function reset() {
-    state.s = 0;
-    state.x = 0;
-    state.xVel = 0;
-    state.speed = 0;
-    state.shield = SHIP.shield;
-    state.boost = 0;
-    state.lap = 0;
-    state.finished = false;
-    state.lapTime = 0;
-    state.bestLap = 0;
-    state.lastLap = 0;
-    state.totalTime = 0;
-    state.shake = 0;
+    Object.assign(state, {
+      s: 0, x: 0, xVel: 0, speed: 0, shield: SHIP.shield,
+      boost: 0, turbo: 0, lap: 0, finished: false,
+      lapTime: 0, bestLap: 0, lastLap: 0, totalTime: 0, rank: 1,
+      shake: 0, hitFlash: 0,
+    });
+  }
+
+  /** Choc latéral venu d'ailleurs : mur franchi, ou adversaire accroché. */
+  function knock(direction, speedLoss, damage) {
+    state.xVel = direction * Math.abs(state.xVel || 1) * 0.6 + direction * 10;
+    state.speed *= speedLoss;
+    state.shield = Math.max(0, state.shield - damage);
+    state.shake = 1;
+    state.hitFlash = 1;
+    state.hitThisFrame = true;
   }
 
   /**
    * @param {number} dt
-   * @param {{steer:number, thrust:boolean}} input
+   * @param {{steer:number, throttle:number, turboRequested:boolean}} input
    * @param {boolean} racing faux pendant le décompte : on peut viser, pas avancer
+   * @param {boolean} scored faux en vitrine : on roule, mais rien n'est compté
    */
-  function update(dt, input, racing) {
+  function update(dt, input, racing, scored = true) {
+    if (!track) return;
+    const limit = track.halfWidth - SHIP.halfWidth;
+
     state.hitThisFrame = false;
     state.boostedThisFrame = false;
+    state.turboThisFrame = false;
     state.lapThisFrame = false;
 
-    const ceiling = state.boost > 0 ? SHIP.boostSpeed : SHIP.maxSpeed;
-
-    if (racing && !state.finished) {
-      state.speed += (input.thrust ? SHIP.thrust : -SHIP.coast) * dt;
-      state.speed -= SHIP.drag * state.speed * state.speed * dt;
-      if (state.boost > 0) state.speed += 260 * dt;
-      state.speed = clamp(state.speed, 0, ceiling);
-    } else {
-      state.speed = Math.max(0, state.speed - SHIP.coast * 2 * dt);
+    if (racing && !state.finished && input.turboRequested) {
+      state.turbo = SHIP.turboDuration;
+      state.turboThisFrame = true;
     }
 
-    // Direction : l'autorité monte avec la vitesse, sans jamais s'annuler à
-    // l'arrêt — sinon on reste coincé contre un mur.
+    const ceiling = state.turbo > 0 ? SHIP.turboSpeed
+      : state.boost > 0 ? SHIP.boostSpeed
+        : SHIP.maxSpeed;
+
+    if (racing && !state.finished) {
+      // La manette est un levier : à fond devant, frein moteur au ralenti.
+      const th = clamp(input.throttle, 0, 1);
+      state.speed += (SHIP.thrust * th - SHIP.brake * (1 - th)) * dt;
+      state.speed -= SHIP.drag * state.speed * state.speed * dt;
+      if (state.boost > 0) state.speed += 240 * dt;
+      if (state.turbo > 0) state.speed += 560 * dt;
+      state.speed = clamp(state.speed, 0, ceiling);
+    } else {
+      state.speed = Math.max(0, state.speed - SHIP.brake * dt);
+    }
+
+    // L'autorité monte avec la vitesse sans jamais s'annuler à l'arrêt —
+    // sinon on reste coincé contre un mur.
     const grip = 0.3 + 0.7 * (state.speed / SHIP.maxSpeed);
     state.xVel += input.steer * SHIP.steerForce * grip * dt;
     state.xVel -= state.xVel * SHIP.steerDamp * dt;
@@ -215,7 +231,7 @@ export function createShip(track, camera) {
     const prevS = state.s;
     state.s += state.speed * dt;
 
-    if (racing && !state.finished) {
+    if (racing && scored && !state.finished) {
       state.lapTime += dt;
       state.totalTime += dt;
       if (track.boostCrossed(prevS, state.s)) {
@@ -233,6 +249,7 @@ export function createShip(track, camera) {
     }
 
     state.boost = Math.max(0, state.boost - dt);
+    state.turbo = Math.max(0, state.turbo - dt);
     state.shake = Math.max(0, state.shake - dt * 2.6);
     state.hitFlash = Math.max(0, state.hitFlash - dt * 3.2);
 
@@ -253,7 +270,6 @@ export function createShip(track, camera) {
       .addScaledVector(ahead.binormal, state.x * 0.45)
       .addScaledVector(ahead.normal, 2.6);
 
-    // roulis : dévers de la piste, plus l'appui du vaisseau dans le virage
     const lean = frame.bank * 0.85 + clamp(state.xVel * 0.013, -0.3, 0.3);
     roll.setFromAxisAngle(frame.tangent, -lean);
     up.copy(frame.normal).applyQuaternion(roll);
@@ -264,10 +280,14 @@ export function createShip(track, camera) {
   return {
     state,
     cockpit,
+    /** Branche le bolide sur un nouveau circuit. */
+    attach(next) { track = next; reset(); },
     reset,
     update,
+    knock,
     buildCockpit,
     get normalizedSpeed() { return state.speed / SHIP.maxSpeed; },
-    get progress() { return (state.s % track.length) / track.length; },
+    /** Distance totale parcourue : sert au classement. */
+    get travelled() { return state.s; },
   };
 }

@@ -1,28 +1,41 @@
-# REBORN — You Man
+# YOU MAN — REBORN
 
 Un antigravité en 3D pour téléphone, debout, dans l'esthétique des circuits
 PlayStation première génération : polygones qui tremblent, textures qui se
-tordent, image en basse définition, et une corruption de signal permanente.
+tordent, image en basse définition, corruption de signal permanente.
 
 La bande-son est **« Reborn » de You Man**, et c'est elle qui tient le volant :
-sa vitesse de lecture — hauteur comprise — suit celle du bolide.
+sa vitesse de lecture — hauteur comprise — suit celle du bolide, et le jeu bat
+sur son tempo.
 
 ## Jouer
-
-Deux gestes, pas un de plus.
 
 | | |
 | --- | --- |
 | **Incliner l'appareil** | tourner à gauche / à droite |
-| **Garder le doigt posé** | accélérer ; doigt levé, le frein moteur fait le reste |
+| **Glisser vers le haut** | mettre les gaz |
+| **Glisser vers le bas** | lever le pied |
+| **Double appui** | turbo |
 
-Trois tours. Les chevrons orange sur la piste donnent une survitesse. Les murs
-coûtent du bouclier, de la vitesse, et font décrocher l'image.
+La manette est un levier : elle reste où on la laisse, on ne garde pas le doigt
+appuyé. Trois tours, cinq adversaires, les chevrons orange donnent une
+survitesse, les murs et les accrochages coûtent du bouclier.
 
-Sans gyroscope (ordinateur, ou capteurs refusés) : glisser le doigt
-horizontalement pour diriger, flèches ou `A`/`D` au clavier, `espace` pour
-accélérer. Le bouton **recentrer** remet l'inclinaison courante comme neutre —
-utile si on joue allongé.
+Sans gyroscope (ordinateur, ou capteurs refusés) : la moitié gauche de l'écran
+dirige, la moitié droite fait manette ; au clavier, flèches gauche/droite pour
+diriger, haut/bas ou espace pour les gaz, majuscule pour le turbo. Le sens de
+l'inclinaison, la sensibilité et le son se règlent dans **Contrôles**.
+
+## Les quatre circuits
+
+| | |
+| --- | --- |
+| **NEON KOWLOON** | nuit, néons, tours à fenêtres allumées, deux tunnels |
+| **GREY DISTRICT** | averse, brume épaisse, blocs de béton serrés contre la piste |
+| **CHROMA TUBE** | boyau presque entièrement couvert, voûte en écrans arc-en-ciel |
+| **RING OF DUST** | orbite, aucun sol, météorites et anneaux de poussière |
+
+Les meilleurs temps sont gardés par circuit dans le navigateur.
 
 ## Lancer en local
 
@@ -34,12 +47,9 @@ python3 -m http.server 8000
 # puis http://localhost:8000
 ```
 
-Pour déployer, publier le dossier tel quel (GitHub Pages, Netlify, un `nginx`).
-
 ## Le rendu PlayStation
 
-Tout le travail est là, et il tient en quatre gestes dans `src/psx.js` et
-`src/post.js`.
+Tout le travail est dans `src/psx.js` et `src/post.js`.
 
 **Accrochage des sommets.** La console n'avait pas de précision sous-pixel :
 les sommets étaient arrondis à la grille de l'écran. Le shader de sommet
@@ -58,23 +68,24 @@ construction et rangée dans la couleur des sommets, comme à l'époque.
 
 **Basse définition et 15 bits.** La scène est rendue dans une cible de 448
 pixels de haut, puis étirée au plein écran au plus proche voisin. La passe
-finale réduit ensuite à 15 bits avec un tramage ordonné 4×4, ajoute les lignes
-de balayage, le bombement du tube et la vignette.
+finale réduit à 15 bits avec un tramage ordonné 4×4, ajoute les lignes de
+balayage, la pluie, le bombement du tube et la vignette.
 
 ## Le glitch
 
-La corruption vit dans la même passe finale, et elle est pilotée : un fond
-permanent, une part proportionnelle à la vitesse, un pic à chaque mur, et des
-rafales aléatoires courtes. Dans l'ordre : décrochage par lignes, blocs
-déplacés, recollage de morceaux d'image dans une palette cassée (le datamosh
-magenta/vert), séparation des composantes, filé radial à grande vitesse.
+La corruption vit dans la passe finale, et elle est pilotée : un fond
+permanent, une part proportionnelle à la vitesse, un coup sur chaque temps fort
+de la musique, un pic à chaque choc, et des rafales aléatoires courtes. Dans
+l'ordre : décrochage par lignes, blocs déplacés, recollage de morceaux d'image
+dans une palette cassée (le datamosh magenta/vert), séparation des composantes,
+filé radial à grande vitesse.
 
 Le tableau de bord passe par la même dégradation : il est peint sur un canvas à
 la définition interne puis injecté dans le shader, donc il se tord et décroche
-avec le reste. C'est ce qui fait croire à une seule machine fatiguée plutôt qu'à
-une interface posée par-dessus.
+avec le reste. C'est ce qui fait croire à une seule machine fatiguée plutôt
+qu'à une interface posée par-dessus.
 
-## La musique
+## La musique, et le jeu qui bat dessus
 
 Le morceau est lu par un `<audio>` plutôt que décodé en mémoire : quatre
 minutes trente-huit en Float32 coûteraient près de cent mégaoctets sur un
@@ -83,63 +94,85 @@ lecture — l'effet bande magnétique qu'on cherche quand le bolide accélère.
 
 | Vitesse | Lecture |
 | --- | --- |
-| à l'arrêt | ×0.62 |
-| plein régime | ×1.26 |
-| survitesse | ×1.45 |
+| à l'arrêt | ×0.68 |
+| plein régime | ×1.22 |
+| survitesse | ×1.38 |
+| turbo | ×1.50 |
 
-L'élément passe ensuite dans Web Audio pour en tirer un niveau — qui fait
-respirer la courbure de l'écran — et pour y mêler les bruitages (choc,
-survitesse, décompte), eux synthétisés.
+**Le tempo.** Le fichier a été mesuré : **119 BPM pile**, premier temps à
+46 ms, grille vérifiée du début à la fin du morceau. Comme la position de
+lecture d'un `<audio>` est exprimée en temps de média, elle avance plus vite
+quand la bande accélère — la grille de temps suit donc la vitesse du bolide
+sans la moindre analyse temps réel, juste une division (`src/rhythm.js`).
 
-Pour changer de morceau : remplacer `assets/reborn.mp3` et ajuster `MUSIC` dans
-`src/config.js`.
+De cette horloge découlent : vingt-huit portiques lumineux qui battent la
+mesure le long du circuit, une lumière qui en fait le tour à la noire, un coup
+de corruption sur chaque temps fort, deux filets qui pulsent dans le HUD, et
+une note de la gamme quand on passe sous un portique.
+
+**La numérisation.** Le morceau traverse un quantificateur : plus l'image se
+corrompt, plus la bande perd de bits (seize au repos, cinq au plus fort). Un
+choc contre un mur s'entend donc autant qu'il se voit.
+
+Pour changer de morceau : remplacer `assets/reborn.mp3`, puis ajuster `MUSIC`
+dans `src/config.js` — en particulier `bpm` et `beatOffset`, sans quoi le volet
+rythmique bat à côté.
 
 ## Ce qu'il y a dedans
 
 ```
-index.html          cadre portrait, écrans de titre et d'arrivée
-styles.css          habillage, titre à décrochages
+index.html          écrans, logotype « YOU MAN » en SVG
+styles.css          habillage, décrochage du logotype
 assets/reborn.mp3   You Man — Reborn (160 kb/s)
 src/
   main.js           boucle, machine d'états, dosage du glitch
-  config.js         tous les réglages : pilotage, circuit, musique, corruption
+  config.js         réglages communs : pilotage, rendu, musique, corruption
+  themes.js         les quatre circuits : tracé, palette, décor, météo
   psx.js            matériaux : accrochage des sommets, placage affine, lumière cuite
-  track.js          circuit, extrusion du ruban, décor, repérage en espace piste
+  track.js          ruban, murs, voûtes, repérage en espace piste
+  scenery.js        décors : ville, béton, tube, orbite
   ship.js           physique du bolide et cockpit
-  controls.js       gyroscope, doigt, clavier
+  opponents.js      les cinq adversaires
+  rhythm.js         horloge musicale et portiques
+  controls.js       gyroscope, manette au doigt, clavier
   hud.js            tableau de bord et sa fonte matricielle 5×7
-  post.js           passe finale : tube cathodique, glitch, tramage
-  audio.js          lecture du morceau, vitesse variable, bruitages
+  post.js           passe finale : tube cathodique, glitch, pluie, tramage
+  audio.js          lecture, vitesse variable, numérisation, bruitages
+  store.js          meilleurs temps et préférences
+  ui.js             menus, scores, pause, arrivée
 vendor/three/       Three.js r169 (MIT)
 ```
 
-Le circuit est une boucle fermée échantillonnée une fois pour toutes ; le
-bolide ne s'y repère que par deux scalaires — la distance parcourue et l'écart
-à l'axe. Pas de physique à intégrer dans le monde, donc pas de vaisseau qui
-traverse un mur un jour de ralenti.
+Le circuit est une boucle fermée échantillonnée une fois pour toutes ; bolides
+et adversaires ne s'y repèrent que par deux scalaires — la distance parcourue
+et l'écart à l'axe. Pas de physique à intégrer dans le monde, donc pas de
+vaisseau qui traverse un mur un jour de ralenti, et une intelligence adverse
+qui tient en trois règles : viser une vitesse propre à chacun, lever le pied
+dans les virages, éviter le joueur quand il arrive à côté.
 
 ## Réglages utiles
 
-Tout est dans `src/config.js`.
+| Réglage | Fichier | Effet |
+| --- | --- | --- |
+| `INPUT.tiltSign` | config | sens de l'inclinaison par défaut |
+| `INPUT.throttleTravel` | config | course du doigt pour aller de 0 à plein gaz |
+| `SHIP.corneringDrift` | config | combien le dévers pousse vers l'extérieur |
+| `RACE.opponents` | config | nombre d'adversaires |
+| `MUSIC.rate*` | config | plage de dérapage de la bande |
+| `MUSIC.bpm` / `beatOffset` | config | calage du volet rythmique |
+| `GLITCH.*` | config | fond, rafales, pic de choc, plafond |
+| `RENDER.internalHeight` | config | définition interne — le plus gros levier de performance |
+| `THEMES` | themes | tracé, palette, brouillard et décor de chaque circuit |
 
-| Réglage | Effet |
-| --- | --- |
-| `SHIP.steerForce` / `tiltRange` | nervosité de la direction, amplitude d'inclinaison |
-| `SHIP.corneringDrift` | combien le dévers pousse vers l'extérieur |
-| `SHIP.maxSpeed` / `thrust` / `drag` | vitesse de croisière et reprise |
-| `MUSIC.rateIdle` / `rateMax` / `rateBoost` | plage de dérapage de la bande |
-| `GLITCH.*` | fond, rafales, pic de choc, plafond |
-| `RENDER.internalHeight` | définition interne — le plus gros levier de performance |
-| `RENDER.vertexJitter` | ampleur du tremblement des polygones |
-| `TRACK.*` | largeur, dévers, finesse du ruban |
-
-`window.REBORN` expose la scène, le bolide, la piste et l'audio pour régler
-depuis la console. `REBORN.setGlitch(0)` fige la corruption le temps de juger
-l'image ; `REBORN.setGlitch(null)` rend la main.
+`window.REBORN` expose la scène, le bolide, la piste, l'audio et les menus pour
+régler depuis la console. `REBORN.setGlitch(0)` fige la corruption le temps de
+juger l'image ; `REBORN.setGlitch(null)` rend la main.
 
 ## Compatibilité
 
-WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son et les capteurs
-démarrent au premier appui, comme l'exigent iOS et Android. Si la moyenne
-descend sous 40 images par seconde, le `devicePixelRatio` retombe à 1 — la
-définition interne, elle, ne bouge pas, puisque c'est elle qui fait le style.
+WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son démarre au premier
+appui — et se retente à chaque tape tant que le navigateur refuse. Les capteurs
+sont demandés au lancement d'une course, après le son : l'inverse ferait perdre
+le contexte de geste et le son serait bloqué. Si la moyenne descend sous 40
+images par seconde, le `devicePixelRatio` retombe à 1 ; la définition interne,
+elle, ne bouge pas, puisque c'est elle qui fait le style.
