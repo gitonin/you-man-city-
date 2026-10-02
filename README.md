@@ -1,82 +1,122 @@
-# YOU MAN — Cité
+# REBORN — You Man
 
-Expérience 3D pour mobile (format **9:16**) : une cité néon de nuit, ambiance
-*Blade Runner*, dans laquelle le nom du groupe électronique **You Man** est
-écrit par les bâtiments eux-mêmes.
+Un antigravité en 3D pour téléphone, debout, dans l'esthétique des circuits
+PlayStation première génération : polygones qui tremblent, textures qui se
+tordent, image en basse définition, et une corruption de signal permanente.
 
-## Le parcours
+La bande-son est **« Reborn » de You Man**, et c'est elle qui tient le volant :
+sa vitesse de lecture — hauteur comprise — suit celle du bolide.
 
-**Niveau 01 — L'angle.** Le seul verbe du joueur est d'orienter la caméra.
-Au ras des rues on ne voit qu'un quartier dense sous la pluie. En prenant de
-l'altitude, les couronnes néon des tours dessinent des formes ; il reste à
-trouver l'azimut exact — un seul, volontairement non rond — depuis lequel le
-mot se lit. Aucune flèche, aucune boussole : le retour est analogique. Une
-jauge de *résonance*, l'intensité des néons, le désaccord d'un drone qui se
-referme. Il faut tenir l'angle une seconde pour verrouiller.
+## Jouer
 
-**Niveau 02 — Les toits.** La caméra reste en l'air et bascule en survol
-oblique : le nom au fond, une dalle de 8 × 8 immeubles bas au premier plan.
-Le drone du niveau 1 se coupe net, un morceau démarre.
+Deux gestes, pas un de plus.
 
-*Le mot est la rythmique.* Les 16 colonnes de la trame « YOU MAN » sont les
-16 doubles-croches de la mesure. À chaque pas, la colonne correspondante
-s'allume et c'est très exactement ce qu'on entend : la ligne du bas (« MAN »)
-tient la batterie — les montants pleins des lettres deviennent des coups de
-grosse caisse, les parties fines des charlestons —, la ligne du haut (« YOU »)
-tient la basse et les stabs, la hauteur suivant la première case allumée de la
-colonne. Tout ce qui n'est pas la grosse caisse passe dans un bus compressé à
-chaque coup : c'est la respiration du genre. Le bouton **le mot** coupe cette
-couche pour n'entendre que la sienne.
+| | |
+| --- | --- |
+| **Incliner l'appareil** | tourner à gauche / à droite |
+| **Garder le doigt posé** | accélérer ; doigt levé, le frein moteur fait le reste |
 
-*Les toits sont l'instrument du joueur.* Chaque toit de la dalle est un pad :
-**8 pistes × 8 pas**, une gamme de Do mineur de la rangée la plus lointaine
-(aigu) à la plus proche (grave). On touche un toit pour poser une note ; une
-tête de lecture balaie la dalle, les toits joués pulsent. Les pads bouclent sur
-8 pas quand le mot en tient 16 : la phrase fait deux mesures.
+Trois tours. Les chevrons orange sur la piste donnent une survitesse. Les murs
+coûtent du bouclier, de la vitesse, et font décrocher l'image.
 
-Le bouton **cité** rend la caméra libre au-dessus du quartier, le nom allumé ;
-**← séquenceur** y ramène.
+Sans gyroscope (ordinateur, ou capteurs refusés) : glisser le doigt
+horizontalement pour diriger, flèches ou `A`/`D` au clavier, `espace` pour
+accélérer. Le bouton **recentrer** remet l'inclinaison courante comme neutre —
+utile si on joue allongé.
 
 ## Lancer en local
 
-Le site est entièrement statique — aucun build, aucune dépendance à installer.
-Il faut juste un serveur HTTP (les modules ES ne se chargent pas en `file://`) :
+Entièrement statique, aucun build, aucune dépendance à installer. Il faut juste
+un serveur HTTP, les modules ES ne se chargeant pas en `file://` :
 
 ```sh
 python3 -m http.server 8000
 # puis http://localhost:8000
 ```
 
-Pour un déploiement, publiez le dossier tel quel (GitHub Pages, Netlify, un
-simple `nginx`…).
+Pour déployer, publier le dossier tel quel (GitHub Pages, Netlify, un `nginx`).
+
+## Le rendu PlayStation
+
+Tout le travail est là, et il tient en quatre gestes dans `src/psx.js` et
+`src/post.js`.
+
+**Accrochage des sommets.** La console n'avait pas de précision sous-pixel :
+les sommets étaient arrondis à la grille de l'écran. Le shader de sommet
+quantifie `gl_Position` sur une grille dérivée de la définition interne, d'où
+le tremblement de la géométrie en mouvement.
+
+**Placage affine.** Pas de correction de perspective non plus : les textures se
+tordent sur les grands polygones. Le GPU, lui, interpole *avec* correction. On
+la défait en transportant `uv * w` et `w` dans deux varyings, puis en divisant
+l'un par l'autre dans le fragment — ce qui redonne exactement une interpolation
+linéaire à l'écran. C'est pour ça que la piste n'a qu'un seul quad en travers :
+plus le polygone est grand, plus la torsion se voit.
+
+**Éclairage cuit.** Aucune lampe dans la scène. La lumière est calculée à la
+construction et rangée dans la couleur des sommets, comme à l'époque.
+
+**Basse définition et 15 bits.** La scène est rendue dans une cible de 448
+pixels de haut, puis étirée au plein écran au plus proche voisin. La passe
+finale réduit ensuite à 15 bits avec un tramage ordonné 4×4, ajoute les lignes
+de balayage, le bombement du tube et la vignette.
+
+## Le glitch
+
+La corruption vit dans la même passe finale, et elle est pilotée : un fond
+permanent, une part proportionnelle à la vitesse, un pic à chaque mur, et des
+rafales aléatoires courtes. Dans l'ordre : décrochage par lignes, blocs
+déplacés, recollage de morceaux d'image dans une palette cassée (le datamosh
+magenta/vert), séparation des composantes, filé radial à grande vitesse.
+
+Le tableau de bord passe par la même dégradation : il est peint sur un canvas à
+la définition interne puis injecté dans le shader, donc il se tord et décroche
+avec le reste. C'est ce qui fait croire à une seule machine fatiguée plutôt qu'à
+une interface posée par-dessus.
+
+## La musique
+
+Le morceau est lu par un `<audio>` plutôt que décodé en mémoire : quatre
+minutes trente-huit en Float32 coûteraient près de cent mégaoctets sur un
+téléphone. `preservesPitch` est désactivé, donc la hauteur suit la vitesse de
+lecture — l'effet bande magnétique qu'on cherche quand le bolide accélère.
+
+| Vitesse | Lecture |
+| --- | --- |
+| à l'arrêt | ×0.62 |
+| plein régime | ×1.26 |
+| survitesse | ×1.45 |
+
+L'élément passe ensuite dans Web Audio pour en tirer un niveau — qui fait
+respirer la courbure de l'écran — et pour y mêler les bruitages (choc,
+survitesse, décompte), eux synthétisés.
+
+Pour changer de morceau : remplacer `assets/reborn.mp3` et ajuster `MUSIC` dans
+`src/config.js`.
 
 ## Ce qu'il y a dedans
 
 ```
-index.html          cadre 9:16, écrans et HUD
-styles.css          habillage néon, pluie, grain, vignette
+index.html          cadre portrait, écrans de titre et d'arrivée
+styles.css          habillage, titre à décrochages
+assets/reborn.mp3   You Man — Reborn (160 kb/s)
 src/
-  main.js           rendu, post-traitement, machine d'états, transitions
-  config.js         tous les réglages sensibles (angle solution, tempo, pistes)
-  font.js           fonte matricielle 5×7 réduite à Y O U M A N
-  groove.js         lecture de la rythmique dans la trame du mot
-  city.js           génération de la cité et pilotage des néons
-  level1.js         caméra orbitale, mesure de l'angle, indices
-  level2.js         dalle de toits, survol oblique et saisie tactile
-  audio.js          synthèse Web Audio (drone, batterie, basse, stabs, pads)
-  textures.js       toutes les textures, peintes au canvas
-vendor/three/       Three.js r169 + passes de post-traitement (MIT)
+  main.js           boucle, machine d'états, dosage du glitch
+  config.js         tous les réglages : pilotage, circuit, musique, corruption
+  psx.js            matériaux : accrochage des sommets, placage affine, lumière cuite
+  track.js          circuit, extrusion du ruban, décor, repérage en espace piste
+  ship.js           physique du bolide et cockpit
+  controls.js       gyroscope, doigt, clavier
+  hud.js            tableau de bord et sa fonte matricielle 5×7
+  post.js           passe finale : tube cathodique, glitch, tramage
+  audio.js          lecture du morceau, vitesse variable, bruitages
+vendor/three/       Three.js r169 (MIT)
 ```
 
-Trois principes de fabrication :
-
-- **Aucune ressource externe.** Pas de CDN, pas d'image, pas de son : les
-  façades, le ciel, le bitume et les halos sont peints au `<canvas>` au
-  démarrage ; la musique est synthétisée. Le site fonctionne hors ligne.
-- **Instanciation.** Tours, socles, remplissage urbain et fenêtres passent par
-  des `InstancedMesh` — quelques appels de rendu pour ~700 bâtiments.
-- **Repli automatique.** Si la moyenne descend sous 42 fps sur 2,5 s, le
-  `devicePixelRatio` retombe à 1 ; sous 28 fps le bloom est coupé.
+Le circuit est une boucle fermée échantillonnée une fois pour toutes ; le
+bolide ne s'y repère que par deux scalaires — la distance parcourue et l'écart
+à l'axe. Pas de physique à intégrer dans le monde, donc pas de vaisseau qui
+traverse un mur un jour de ralenti.
 
 ## Réglages utiles
 
@@ -84,31 +124,22 @@ Tout est dans `src/config.js`.
 
 | Réglage | Effet |
 | --- | --- |
-| `TEXT_YAW` | l'azimut solution de l'énigme |
-| `PUZZLE.azTolerance` / `elTolerance` | largeur de la fenêtre de résonance |
-| `PUZZLE.lockThreshold` / `holdSeconds` | difficulté du verrouillage |
-| `PUZZLE.hints` | textes d'aide et leur délai d'apparition |
-| `CAM.drag` | sensibilité du glissement |
-| `TRACKS` | les 8 pistes du joueur : note et teinte |
-| `PADS` / `AERIAL` | dalle des toits et cadrage du survol |
-| `DEMO_PATTERN` / `SEED_PATTERN` | motifs de départ du séquenceur |
-| `BPM` | tempo (122 par défaut, doubles-croches) |
+| `SHIP.steerForce` / `tiltRange` | nervosité de la direction, amplitude d'inclinaison |
+| `SHIP.corneringDrift` | combien le dévers pousse vers l'extérieur |
+| `SHIP.maxSpeed` / `thrust` / `drag` | vitesse de croisière et reprise |
+| `MUSIC.rateIdle` / `rateMax` / `rateBoost` | plage de dérapage de la bande |
+| `GLITCH.*` | fond, rafales, pic de choc, plafond |
+| `RENDER.internalHeight` | définition interne — le plus gros levier de performance |
+| `RENDER.vertexJitter` | ampleur du tremblement des polygones |
+| `TRACK.*` | largeur, dévers, finesse du ruban |
 
-Les règles qui transforment le mot en batterie tiennent en une vingtaine de
-lignes dans `src/groove.js` — c'est là qu'on change le style du morceau.
-
-Le mot affiché se change dans `city.js` : `layoutText(['YOU', 'MAN'], …)`.
-La fonte ne couvre que les lettres nécessaires — en ajouter d'autres se fait
-dans `src/font.js`. Attention : les chasses y sont calibrées pour que chaque
-ligne fasse exactement 16 colonnes, soit une mesure. Un mot d'une autre largeur
-change la longueur de la boucle.
-
-`window.YOUMAN` expose la scène, les deux niveaux et l'audio pour régler
-l'ensemble depuis la console sans recharger.
+`window.REBORN` expose la scène, le bolide, la piste et l'audio pour régler
+depuis la console. `REBORN.setGlitch(0)` fige la corruption le temps de juger
+l'image ; `REBORN.setGlitch(null)` rend la main.
 
 ## Compatibilité
 
-WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son démarre au premier
-appui, comme l'exigent iOS et Android. Sur mobile, un bouton **gyro** permet de
-piloter la caméra à l'inclinaison de l'appareil : téléphone dressé = vue de
-rue, téléphone à plat = zénith (iOS demande l'autorisation des capteurs).
+WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son et les capteurs
+démarrent au premier appui, comme l'exigent iOS et Android. Si la moyenne
+descend sous 40 images par seconde, le `devicePixelRatio` retombe à 1 — la
+définition interne, elle, ne bouge pas, puisque c'est elle qui fait le style.

@@ -1,147 +1,118 @@
 /**
- * Réglages partagés. Tout ce qui se "sent" au doigt est ici.
+ * REBORN — réglages.
+ *
+ * Tout ce qui se règle à l'oreille ou au pouce est ici. Le reste du code
+ * n'invente aucune constante de gameplay.
  */
 
+/** Rendu : on travaille en basse définition, comme la machine d'origine. */
+export const RENDER = {
+  /** Hauteur de la cible de rendu interne. La largeur suit le ratio écran. */
+  internalHeight: 448,
+  /** Divise la grille d'accrochage des sommets : > 1 = tremblement plus gros. */
+  vertexJitter: 2.0,
+  fov: 68,
+  near: 0.6,
+  far: 2600,
+  fogNear: 150,
+  fogFar: 820,
+  /** Plafond du devicePixelRatio pour le passage final plein écran. */
+  maxPixelRatio: 2,
+};
+
+/** Palette : bleus sales, néons, et les couleurs de corruption du datamosh. */
 export const PALETTE = {
-  ink: 0x05030c,
-  fog: 0x0a0718,
-  skyTop: 0x0a0818,
-  skyHorizon: 0x2b1436,
-  smog: 0x3a1a2e,
-  cyan: 0x25e6ff,
-  magenta: 0xff2fd0,
-  amber: 0xffb35c,
-  violet: 0x8a5cff,
+  sky: 0x16222e,
+  fog: 0x16222e,
+  horizon: 0x2a3f4e,
+  road: 0x6b737a,
+  wall: 0x39434d,
+  accent: 0x3cf0ff,
+  hot: 0xff2e6b,
+  boost: 0xffa023,
 };
 
-/** Trame de la ville : une cellule = une parcelle. */
-export const GRID = {
-  cell: 12,
-  /** Écart vertical (en lignes) entre "YOU" et "MAN". */
-  lineGap: 3,
-  /** Hauteur des tours qui dessinent les lettres. */
-  towerH: [58, 96],
-  /** Emprise au sol d'une tour-lettre (le reste devient rue). */
-  towerFoot: 9.1,
-  /** Socles bas qui remplissent les vides du quartier. */
-  podiumH: [5, 17],
-  podiumFoot: 10.4,
-  /** Anneau de remplissage autour du quartier. */
-  fillerCount: 340,
-  fillerRadius: [175, 470],
-  fillerH: [12, 78],
-  fillerFoot: [8, 20],
+/** Le circuit : généré à partir d'une poignée de points de contrôle. */
+export const TRACK = {
+  /** Demi-largeur de la piste. Le vaisseau en fait 1.6 de large. */
+  halfWidth: 13,
+  wallHeight: 7.5,
+  /** Nombre d'échantillons sur toute la boucle : la finesse du ruban. */
+  samples: 1500,
+  /** Longueur d'un carreau de texture le long de la piste. */
+  tileLength: 26,
+  /** Roulis dans les virages, en radians par unité de courbure. */
+  bankStrength: 46,
+  bankMax: 0.52,
 };
 
-/**
- * Orientation du quartier. C'est *la* réponse de l'énigme : le joueur doit
- * trouver cet azimut, à la verticale. Valeur volontairement non ronde.
- */
-export const TEXT_YAW = 0.6283; // ~36°
-
-export const CAM = {
-  /** Élévation : 0 = à hauteur de rue, PI/2 = plein zénith. */
-  elevRange: [0.055, Math.PI / 2 - 0.012],
-  /** Distance interpolée selon l'élévation (rase-mottes → satellite). */
-  distRange: [200, 620],
-  /** Hauteur du point visé, interpolée elle aussi : skyline → plancher. */
-  pivotYRange: [54, 6],
-  startAzimuth: TEXT_YAW + 2.35,
-  startElev: 0.11,
-  fov: 52,
-  /** Sensibilité du glissement, en radians par pixel. */
-  drag: { azimuth: 0.0075, elev: 0.0034 },
-  inertia: 0.9,
-  /** Dérive lente tant que le joueur n'a rien touché. */
-  idleDrift: 0.035,
-};
-
-/** Fenêtre de tolérance de l'énigme. */
-export const PUZZLE = {
-  azTolerance: 0.55, // rad — au-delà, plus aucun signal
-  elTolerance: 0.5,
-  /** Courbe de lecture de la jauge : < 1 rend la progression plus lisible. */
-  curve: 0.55,
-  lockThreshold: 0.88,
-  /** Durée de maintien dans la fenêtre avant validation. */
-  holdSeconds: 1.0,
-  hints: [
-    [22, 'la réponse est au-dessus de la ville'],
-    [46, 'glissez vers le haut pour prendre de l’altitude'],
-    [78, 'au zénith, faites pivoter jusqu’à ce que ça résonne'],
-  ],
+/** Pilotage du vaisseau. Vitesses en unités par seconde. */
+export const SHIP = {
+  maxSpeed: 330,
+  boostSpeed: 430,
+  /** Poussée doigt appuyé, et frein moteur doigt levé. */
+  thrust: 118,
+  coast: 46,
+  /** Traînée quadratique : fixe la vitesse de croisière. */
+  drag: 0.00052,
+  /** Autorité du gyro sur la dérive latérale. */
+  steerForce: 92,
+  /** Poussée vers l'extérieur du virage : le dévers se paie. */
+  corneringDrift: 0.26,
+  steerDamp: 3.1,
+  /** Inclinaison max de l'appareil prise en compte, en degrés. */
+  tiltRange: 26,
+  /** Zone morte du gyro, en degrés. */
+  tiltDeadzone: 1.8,
+  halfWidth: 2.4,
+  /** Perte de vitesse et de bouclier contre un mur. */
+  wallBounce: 0.45,
+  wallSpeedLoss: 0.82,
+  wallDamage: 7,
+  /** Durée et puissance du coup de boost des plaques orange. */
+  boostDuration: 1.9,
+  shield: 100,
+  /** Flottement du cockpit. */
+  hoverAmp: 0.22,
+  hoverFreq: 2.7,
 };
 
 /**
- * Quartier-séquenceur du niveau 2 : une dalle de 8 × 8 immeubles bas, au sud
- * du mot. Leurs toits sont les pads.
+ * Musique : la bande dérape avec le bolide. On coupe `preservesPitch` pour
+ * que la hauteur suive la vitesse — c'est l'effet bande magnétique.
  */
-export const PADS = {
-  cols: 8,
-  rows: 8,
-  /** Pas de la trame (une parcelle de pad est plus large qu'une parcelle de ville). */
-  cell: 21,
-  /** Espace laissé entre le bas du mot et la première rangée de pads. */
-  gapFromWord: 40,
-  height: [9, 26],
-  foot: 17.5,
+export const MUSIC = {
+  src: './assets/reborn.mp3',
+  /** Vitesse de lecture à l'arrêt et à pleine vitesse. */
+  rateIdle: 0.62,
+  rateMax: 1.26,
+  /** Au-delà de la vitesse max (boost), la bande part plus haut. */
+  rateBoost: 1.45,
+  /** Lissage du changement de vitesse, en secondes. */
+  smoothing: 0.35,
+  volume: 0.85,
 };
 
-/** Caméra du niveau 2 : survol oblique, le mot au fond, les pads devant. */
-export const AERIAL = {
-  elevation: 0.95, // rad — ~54°
-  distance: 538,
-  /** Point visé, en Z local (0 = centre du mot). */
-  pivotZ: 156,
-  pivotY: 16,
-  /** Amplitude du léger balancement continu : assez pour respirer, pas assez
-   *  pour gêner la lecture du nom ni la visée des toits. */
-  swayAzimuth: 0.018,
-  swayElevation: 0.011,
-  swayPeriod: 30,
+/** Corruption de l'image. Le glitch est un personnage, pas un accident. */
+export const GLITCH = {
+  /** Niveau de fond, toujours présent. */
+  idle: 0.05,
+  /** Part proportionnelle à la vitesse. */
+  speedGain: 0.09,
+  /** Pic lors d'un choc, et sa décroissance par seconde. */
+  hitBurst: 0.42,
+  hitDecay: 1.8,
+  /** Rafales aléatoires : probabilité par seconde, durée, intensité. */
+  burstChance: 0.4,
+  burstTime: [0.06, 0.3],
+  burstPower: [0.16, 0.5],
+  /** Plafond : au-delà, l'image se dissout et on ne pilote plus rien. */
+  ceiling: 0.6,
 };
 
-/**
- * Les 8 pistes du joueur, de la rangée la plus lointaine à la plus proche.
- * Toutes mélodiques : la batterie, elle, vient du mot.
- */
-export const TRACKS = [
-  { name: 'C5', freq: 523.25, hue: 0.5 },
-  { name: 'A#4', freq: 466.16, hue: 0.55 },
-  { name: 'G4', freq: 392.0, hue: 0.6 },
-  { name: 'F4', freq: 349.23, hue: 0.65 },
-  { name: 'D#4', freq: 311.13, hue: 0.72 },
-  { name: 'C4', freq: 261.63, hue: 0.79 },
-  { name: 'G3', freq: 196.0, hue: 0.86 },
-  { name: 'C3', freq: 130.81, hue: 0.92 },
-];
-
-/** Une mesure de 16 doubles-croches ; les pads bouclent sur 8. */
-export const STEPS = 16;
-export const PAD_STEPS = 8;
-
-/** Motif proposé par le bouton « motif » — 8 pistes × 8 pas. */
-export const DEMO_PATTERN = [
-  [0, 0, 0, 0, 0, 0, 1, 0],
-  [0, 0, 1, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 1, 0, 0, 1],
-  [1, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 1, 0, 0, 1, 0],
-  [0, 1, 0, 0, 0, 1, 0, 0],
-  [1, 0, 0, 0, 1, 0, 0, 0],
-  [1, 0, 0, 1, 0, 0, 1, 0],
-];
-
-/** Amorce jouée dès l'entrée dans le niveau 2 : une simple ligne de basse. */
-export const SEED_PATTERN = [
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 1, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 1, 0],
-  [0, 0, 0, 0, 1, 0, 0, 0],
-  [1, 0, 0, 0, 0, 0, 0, 0],
-];
-
-export const BPM = { min: 96, max: 138, start: 122, step: 2 };
+/** Course. */
+export const RACE = {
+  laps: 3,
+  /** Décompte avant le départ, en secondes. */
+  countdown: 3,
+};
