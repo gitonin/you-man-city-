@@ -5,43 +5,45 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 /**
  * La bande-son, et tout ce qui sonne.
  *
- * Le morceau est lu par un `<audio>` plutôt que décodé en mémoire : 4 min 38
- * en Float32 coûteraient près de cent mégaoctets sur un téléphone. On coupe
- * `preservesPitch`, donc la hauteur suit la vitesse de lecture — l'effet bande
- * magnétique qu'on cherche quand le bolide accélère.
+ * **Le morceau sort en direct par l'élément `<audio>`, sans passer par Web
+ * Audio.** C'est délibéré, et c'est ce qui corrige le « je n'entends rien »
+ * sur téléphone :
  *
- * Deux précautions pèsent lourd sur mobile :
+ *  - sur iPhone, le petit interrupteur latéral coupe la sortie d'un
+ *    `AudioContext` mais pas celle d'un élément média. Router la musique dans
+ *    le graphe — ce que faisait la version précédente pour la numériser — la
+ *    faisait donc disparaître dès que l'appareil était en mode silencieux ;
+ *  - `createMediaElementSource` est à sens unique : une fois l'élément happé
+ *    par le graphe, on ne peut plus le rebrancher sur les haut-parleurs. Mieux
+ *    vaut ne jamais l'y mettre ;
+ *  - changer `playbackRate` sur un élément routé déclenche en prime des coupures
+ *    sur plusieurs navigateurs mobiles.
  *
- *  - `play()` doit partir **dans** le geste de l'utilisateur. Toute attente
- *    avant (une demande d'autorisation de capteurs, par exemple) fait perdre
- *    le contexte de geste et le navigateur refuse le son.
- *  - pas d'attribut `crossOrigin` : il est inutile en même origine et, servi
- *    par un hébergeur qui n'envoie pas les en-têtes CORS, il suffit à rendre
- *    le fichier illisible.
+ * Web Audio ne sert donc qu'aux bruitages. Si l'appareil est en silencieux, on
+ * perd les bruitages — pas la musique.
+ *
+ * La « numérisation » du morceau se fait autrement : la hauteur suit la vitesse
+ * (`preservesPitch` désactivé, effet bande magnétique), et un choc fait bégayer
+ * la lecture d'un court saut en arrière.
  */
 export function createAudio() {
   const element = new Audio();
   element.src = MUSIC.src;
   element.loop = true;
   element.preload = 'auto';
-  element.volume = MUSIC.volume;
+  element.volume = MUSIC.volume; // ignoré sur iOS, sans conséquence
   element.playsInline = true;
 
-  /** @type {AudioContext|null} */
+  /** @type {AudioContext|null} contexte réservé aux bruitages */
   let ctx = null;
-  let master = null;
   let sfxBus = null;
-  let dryGain = null;
-  let wetGain = null;
-  let shaper = null;
-  let routed = false;
+
   let playing = false;
   let muted = false;
-
+  let failed = false;
   let rate = MUSIC.rateIdle;
-  let crushBits = MUSIC.crushBitsClean;
-
-  /** Secours quand le navigateur refuse le son : l'horloge tourne quand même. */
+  let lastDip = 0;
+  /** Horloge de secours quand le navigateur refuse la lecture. */
   let fallbackTime = 0;
 
   function setPreservesPitch(value) {
@@ -51,58 +53,22 @@ export function createAudio() {
   }
   setPreservesPitch(false);
 
-  /** Courbe de quantification : c'est elle qui « numérise » le morceau. */
-  function crushCurve(bits) {
-    const levels = Math.pow(2, clamp(bits, 2, 16)) / 2;
-    const n = 2048;
-    const curve = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const x = (i / (n - 1)) * 2 - 1;
-      curve[i] = Math.round(x * levels) / levels;
-    }
-    return curve;
-  }
+  element.addEventListener('playing', () => { playing = true; failed = false; });
+  element.addEventListener('pause', () => { playing = false; });
+  element.addEventListener('error', () => { failed = true; playing = false; });
 
-  function buildGraph() {
+  /** Le contexte des bruitages n'est créé qu'au premier geste. */
+  function ensureCtx() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume();
+      return;
+    }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC({ latencyHint: 'interactive' });
-
-    master = ctx.createGain();
-    master.gain.value = 1;
-    master.connect(ctx.destination);
-
     sfxBus = ctx.createGain();
-    sfxBus.gain.value = 0.9;
-    sfxBus.connect(master);
-
-    // Le morceau ne traverse le graphe que si la source peut être créée. En
-    // cas d'échec, l'élément sonne tout seul : mieux vaut perdre l'effet que
-    // le son.
-    try {
-      const source = ctx.createMediaElementSource(element);
-
-      dryGain = ctx.createGain();
-      dryGain.gain.value = 1;
-
-      shaper = ctx.createWaveShaper();
-      shaper.curve = crushCurve(crushBits);
-      shaper.oversample = 'none';
-
-      const grit = ctx.createBiquadFilter();
-      grit.type = 'lowpass';
-      grit.frequency.value = 3600;
-      grit.Q.value = 0.8;
-
-      wetGain = ctx.createGain();
-      wetGain.gain.value = 0;
-
-      source.connect(dryGain).connect(master);
-      source.connect(shaper).connect(grit).connect(wetGain).connect(master);
-      routed = true;
-    } catch {
-      routed = false;
-    }
+    sfxBus.gain.value = muted ? 0 : 0.9;
+    sfxBus.connect(ctx.destination);
   }
 
   function noise(seconds) {
@@ -122,32 +88,29 @@ export function createAudio() {
   return {
     element,
     get playing() { return playing; },
-    get routed() { return routed; },
+    get failed() { return failed; },
     get muted() { return muted; },
     get rate() { return rate; },
 
     /**
      * À appeler **en premier** dans le gestionnaire du geste utilisateur,
-     * avant toute attente.
+     * avant toute attente : une autorisation de capteurs demandée avant ferait
+     * perdre le contexte de geste et le son serait refusé.
      */
     start() {
-      if (!ctx) buildGraph();
-      if (ctx && ctx.state === 'suspended') ctx.resume();
+      ensureCtx();
       setPreservesPitch(false);
       element.playbackRate = clamp(rate, 0.25, 4);
       const p = element.play();
-      if (p && p.then) {
-        p.then(() => { playing = true; }).catch(() => { playing = false; });
-      } else {
-        playing = true;
-      }
+      if (p && p.then) p.then(() => { playing = true; }).catch(() => { playing = false; });
+      else playing = true;
       return p || Promise.resolve();
     },
 
-    /** Nouvelle tentative, depuis un autre geste, si le premier a été refusé. */
+    /** Nouvelle tentative, depuis un autre geste, si la première a été refusée. */
     retry() {
       if (playing) return Promise.resolve(true);
-      if (ctx && ctx.state === 'suspended') ctx.resume();
+      ensureCtx();
       const p = element.play();
       return (p && p.then ? p : Promise.resolve())
         .then(() => { playing = true; return true; })
@@ -160,14 +123,14 @@ export function createAudio() {
     toggleMute() {
       muted = !muted;
       element.muted = muted;
-      if (master) master.gain.value = muted ? 0 : 1;
+      if (sfxBus) sfxBus.gain.value = muted ? 0 : 0.9;
       return muted;
     },
 
     /**
      * Position de lecture, en secondes de média. C'est l'horloge du volet
-     * rythmique : elle accélère avec la bande, donc la grille de temps suit
-     * la vitesse du bolide sans rien calculer.
+     * rythmique : elle accélère avec la bande, donc la grille de temps suit la
+     * vitesse du bolide sans rien calculer.
      */
     mediaTime() {
       if (playing && element.currentTime > 0) return element.currentTime;
@@ -191,30 +154,31 @@ export function createAudio() {
       const k = 1 - Math.exp(-dt / Math.max(0.01, MUSIC.smoothing));
       rate += (target - rate) * k;
       rate = clamp(rate, 0.25, 4);
-      if (playing) element.playbackRate = rate;
+      if (playing) {
+        // on n'écrit que si ça bouge vraiment : certains navigateurs mobiles
+        // hoquettent si on repose la valeur à chaque image
+        if (Math.abs(element.playbackRate - rate) > 0.004) element.playbackRate = rate;
+      }
       fallbackTime += dt * rate;
     },
 
     /**
-     * Numérisation du morceau : plus l'image se corrompt, plus la bande perd
-     * de bits. Le changement de courbe n'a lieu qu'au franchissement d'un
-     * entier, pour ne pas reconstruire un tableau à chaque image.
+     * Plongeon de hauteur à l'impact : la bande ralentit d'un coup, puis
+     * `setSpeed` la ramène toute seule par son lissage.
      *
-     * @param {number} amount 0 = propre, 1 = complètement écrasé
+     * On avait d'abord essayé un bégaiement par repositionnement de la
+     * lecture. Mauvaise idée : un serveur qui ne gère pas les requêtes par
+     * plage — `python -m http.server`, par exemple — ne sait pas repositionner
+     * un média, et la lecture repartait du début. Jouer sur la vitesse ne
+     * dépend, lui, de rien.
      */
-    setCrush(amount) {
-      if (!routed) return;
-      const a = clamp(amount, 0, 1);
-      const bits = Math.round(
-        MUSIC.crushBitsClean + (MUSIC.crushBitsDirty - MUSIC.crushBitsClean) * a
-      );
-      if (bits !== crushBits) {
-        crushBits = bits;
-        shaper.curve = crushCurve(bits);
-      }
-      const now = ctx.currentTime;
-      wetGain.gain.setTargetAtTime(a * 0.85, now, 0.08);
-      dryGain.gain.setTargetAtTime(1 - a * 0.6, now, 0.08);
+    dip(strength = 1) {
+      if (!playing || muted) return;
+      const now = performance.now();
+      if (now - lastDip < 450) return;
+      lastDip = now;
+      rate = clamp(rate * (1 - 0.4 * clamp(strength, 0, 1)), 0.25, 4);
+      element.playbackRate = rate;
     },
 
     /** Note courte des portiques rythmiques. */

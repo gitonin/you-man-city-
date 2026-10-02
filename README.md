@@ -92,6 +92,16 @@ minutes trente-huit en Float32 coûteraient près de cent mégaoctets sur un
 téléphone. `preservesPitch` est désactivé, donc la hauteur suit la vitesse de
 lecture — l'effet bande magnétique qu'on cherche quand le bolide accélère.
 
+**Le morceau ne traverse pas Web Audio, et c'est voulu.** Sur iPhone,
+l'interrupteur latéral coupe la sortie d'un `AudioContext` mais pas celle d'un
+élément média : router la musique dans le graphe — ce que faisait une version
+précédente pour la numériser — la faisait disparaître dès que l'appareil était
+en mode silencieux. S'ajoutent deux pièges : `createMediaElementSource` est à
+sens unique, on ne peut plus rebrancher l'élément sur les haut-parleurs ; et
+changer `playbackRate` sur un élément routé provoque des coupures sur plusieurs
+navigateurs mobiles. Web Audio ne sert donc qu'aux bruitages. Appareil en
+silencieux, on perd les bruitages, pas la musique.
+
 | Vitesse | Lecture |
 | --- | --- |
 | à l'arrêt | ×0.68 |
@@ -110,9 +120,13 @@ mesure le long du circuit, une lumière qui en fait le tour à la noire, un coup
 de corruption sur chaque temps fort, deux filets qui pulsent dans le HUD, et
 une note de la gamme quand on passe sous un portique.
 
-**La numérisation.** Le morceau traverse un quantificateur : plus l'image se
-corrompt, plus la bande perd de bits (seize au repos, cinq au plus fort). Un
-choc contre un mur s'entend donc autant qu'il se voit.
+**Le plongeon.** À l'impact, la vitesse de lecture tombe d'un coup puis
+remonte avec le lissage : la bande fait un « wow » de magnétophone qu'on
+encaisse en même temps que le mur. On avait d'abord essayé un bégaiement par
+repositionnement de la lecture — mauvaise idée : un serveur qui ne gère pas les
+requêtes par plage, `python -m http.server` par exemple, ne sait pas
+repositionner un média et la lecture repart du début. Jouer sur la vitesse ne
+dépend, lui, de rien.
 
 Pour changer de morceau : remplacer `assets/reborn.mp3`, puis ajuster `MUSIC`
 dans `src/config.js` — en particulier `bpm` et `beatOffset`, sans quoi le volet
@@ -154,11 +168,11 @@ dans les virages, éviter le joueur quand il arrive à côté.
 
 | Réglage | Fichier | Effet |
 | --- | --- | --- |
-| `INPUT.tiltSign` | config | sens de l'inclinaison par défaut |
 | `INPUT.throttleTravel` | config | course du doigt pour aller de 0 à plein gaz |
 | `SHIP.corneringDrift` | config | combien le dévers pousse vers l'extérieur |
 | `RACE.opponents` | config | nombre d'adversaires |
 | `MUSIC.rate*` | config | plage de dérapage de la bande |
+| `INPUT.tiltSign` | config | sens par défaut, que le menu peut inverser |
 | `MUSIC.bpm` / `beatOffset` | config | calage du volet rythmique |
 | `GLITCH.*` | config | fond, rafales, pic de choc, plafond |
 | `RENDER.internalHeight` | config | définition interne — le plus gros levier de performance |

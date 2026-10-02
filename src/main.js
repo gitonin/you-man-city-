@@ -186,7 +186,7 @@ const ui = createUi(store, {
 dom.frame.addEventListener('pointerdown', () => {
   if (audio.playing) return;
   audio.start();
-  setTimeout(() => ui.setSoundBlocked(!audio.playing), 400);
+  setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 400);
 });
 
 async function startRace(themeId) {
@@ -209,7 +209,7 @@ async function startRace(themeId) {
   const gotGyro = await controls.enableGyro();
   ui.setGyro(gotGyro);
   applySettings();
-  setTimeout(() => ui.setSoundBlocked(!audio.playing), 500);
+  setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 500);
   clock.getDelta();
 }
 
@@ -374,6 +374,7 @@ function frame() {
       const away = Math.sign(ship.state.x) || 1;
       ship.knock(away, SHIP.rubSpeedLoss, SHIP.rubDamage);
       audio.hit(0.6);
+      audio.dip(0.45);
     }
     ship.state.rank = world.opponents.rankOf(ship.state.s);
     world.rhythm.update(dt, ship.state.s, prevS, phase === 'racing');
@@ -383,6 +384,9 @@ function frame() {
   if (ship.state.hitThisFrame) {
     glitch.hit = GLITCH.hitBurst;
     audio.hit();
+    // la bande plonge avec l'image : seule « numérisation » qu'on s'autorise
+    // sur le morceau, parce qu'elle ne traverse aucun traitement
+    audio.dip(1);
   }
   if (ship.state.boostedThisFrame) audio.boost();
   if (ship.state.turboThisFrame) audio.turbo();
@@ -401,8 +405,6 @@ function frame() {
 
   const beatPulse = world ? world.rhythm.state.pulse : 0;
   const glitchLevel = updateGlitch(dt, speedNorm, beatPulse);
-  // la bande se numérise à mesure que l'image se corrompt
-  audio.setCrush(clamp((glitchLevel - GLITCH.idle) / 0.45, 0, 1) * 0.9);
 
   if (phase === 'finish') {
     center = ship.state.rank === 1 ? 'P1' : `P${ship.state.rank}`;

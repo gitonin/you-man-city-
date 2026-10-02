@@ -56,8 +56,11 @@ export const INPUT = {
   /** Inclinaison max de l'appareil prise en compte, en degrés. */
   tiltRange: 26,
   tiltDeadzone: 1.8,
-  /** Sens du gyroscope : -1 pour incliner à gauche et tourner à gauche. */
-  tiltSign: -1,
+  /**
+   * Sens du gyroscope. Le réglage « Contrôles » le multiplie par -1, donc
+   * cette valeur n'est que le défaut : l'utilisateur garde le dernier mot.
+   */
+  tiltSign: 1,
   /** Course du pavé d'accélération, en fraction de la hauteur d'écran. */
   throttleTravel: 0.3,
   /** Fenêtre du double-appui, en millisecondes, et tolérance en pixels. */
@@ -83,9 +86,6 @@ export const MUSIC = {
   /** Lissage du changement de vitesse, en secondes. */
   smoothing: 0.35,
   volume: 0.82,
-  /** Numérisation : profondeur de bits à froid et à chaud. */
-  crushBitsClean: 16,
-  crushBitsDirty: 5,
 };
 
 /** Corruption de l'image. Le glitch est un personnage, pas un accident. */

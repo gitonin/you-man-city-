@@ -33,7 +33,7 @@ export function createUi(store, handlers) {
     results: $('screen-results'),
   };
   const chrome = $('race-chrome');
-  const soundChip = $('btn-sound');
+  const soundAlert = $('sound-alert');
   const centerChip = $('btn-center');
 
   let current = 'title';
@@ -140,7 +140,7 @@ export function createUi(store, handlers) {
   $('res-again').addEventListener('click', () => handlers.onRestart());
   $('res-quit').addEventListener('click', () => handlers.onQuit());
   centerChip.addEventListener('click', () => handlers.onRecenter());
-  soundChip.addEventListener('click', () => handlers.onSoundRetry());
+  soundAlert.addEventListener('click', () => handlers.onSoundRetry());
 
   syncOptions();
 
@@ -171,6 +171,11 @@ export function createUi(store, handlers) {
     setGyro(on) { centerChip.hidden = !on; },
 
     /** Le navigateur a refusé le son : on laisse un moyen de le relancer. */
-    setSoundBlocked(blocked) { soundChip.hidden = !blocked; },
+    setSoundBlocked(blocked, failed = false) {
+      soundAlert.hidden = !blocked;
+      soundAlert.textContent = failed
+        ? 'bande-son illisible — vérifier assets/reborn.mp3'
+        : 'son coupé — toucher pour activer';
+    },
   };
 }
