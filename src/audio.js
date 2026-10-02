@@ -1,4 +1,5 @@
 import { MUSIC } from './config.js';
+import { createVoice } from './voice.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -11,22 +12,22 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  *
  *  - sur iPhone, le petit interrupteur latéral coupe la sortie d'un
  *    `AudioContext` mais pas celle d'un élément média. Router la musique dans
- *    le graphe — ce que faisait la version précédente pour la numériser — la
- *    faisait donc disparaître dès que l'appareil était en mode silencieux ;
+ *    le graphe la faisait donc disparaître en mode silencieux ;
  *  - `createMediaElementSource` est à sens unique : une fois l'élément happé
- *    par le graphe, on ne peut plus le rebrancher sur les haut-parleurs. Mieux
- *    vaut ne jamais l'y mettre ;
- *  - changer `playbackRate` sur un élément routé déclenche en prime des coupures
- *    sur plusieurs navigateurs mobiles.
+ *    par le graphe, on ne peut plus le rebrancher sur les haut-parleurs ;
+ *  - changer `playbackRate` sur un élément routé déclenche en prime des
+ *    coupures sur plusieurs navigateurs mobiles.
  *
- * Web Audio ne sert donc qu'aux bruitages. Si l'appareil est en silencieux, on
- * perd les bruitages — pas la musique.
- *
- * La « numérisation » du morceau se fait autrement : la hauteur suit la vitesse
- * (`preservesPitch` désactivé, effet bande magnétique), et un choc fait bégayer
- * la lecture d'un court saut en arrière.
+ * Web Audio ne sert donc qu'aux bruitages, au grondement du réacteur et à
+ * l'annonceur. Appareil en silencieux : on perd ça, pas la musique.
  */
-export function createAudio() {
+/**
+ * @param {object} [o]
+ * @param {BaseAudioContext} [o.context] contexte imposé. Sert à rendre la
+ *   bande sonore hors ligne pour l'écouter sans lancer le jeu : passer un
+ *   `OfflineAudioContext` suffit, tous les nœuds utilisés y fonctionnent.
+ */
+export function createAudio({ context = null } = {}) {
   const element = new Audio();
   element.src = MUSIC.src;
   element.loop = true;
@@ -34,9 +35,14 @@ export function createAudio() {
   element.volume = MUSIC.volume; // ignoré sur iOS, sans conséquence
   element.playsInline = true;
 
-  /** @type {AudioContext|null} contexte réservé aux bruitages */
+  /** @type {AudioContext|null} contexte réservé à tout sauf la musique */
   let ctx = null;
+  let master = null;
   let sfxBus = null;
+  let spaceSend = null;
+  let subBus = null;
+  let voice = null;
+  let engine = null;
 
   let playing = false;
   let muted = false;
@@ -57,21 +63,23 @@ export function createAudio() {
   element.addEventListener('pause', () => { playing = false; });
   element.addEventListener('error', () => { failed = true; playing = false; });
 
-  /** Le contexte des bruitages n'est créé qu'au premier geste. */
-  function ensureCtx() {
-    if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume();
-      return;
+  /**
+   * Écrêtage doux. Les graves très bas ne sortent pas d'un haut-parleur de
+   * téléphone : on les sature légèrement pour fabriquer leurs harmoniques, et
+   * l'oreille reconstitue la fondamentale qu'elle n'entend pas. C'est ce qui
+   * fait qu'un impact à 30 Hz s'entend quand même dans la main.
+   */
+  function saturationCurve(drive = 2.2) {
+    const n = 1024;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * drive) / Math.tanh(drive);
     }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    ctx = new AC({ latencyHint: 'interactive' });
-    sfxBus = ctx.createGain();
-    sfxBus.gain.value = muted ? 0 : 0.9;
-    sfxBus.connect(ctx.destination);
+    return curve;
   }
 
-  function noise(seconds) {
+  function noiseBuffer(seconds) {
     const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -85,8 +93,123 @@ export function createAudio() {
     param.exponentialRampToValueAtTime(0.0001, t + attack + decay);
   }
 
+  /** Grondement de réacteur : la fondation grave, pilotée par la vitesse. */
+  function buildEngine() {
+    const out = ctx.createGain();
+    out.gain.value = 0.0001;
+    out.connect(master);
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 180;
+    lp.Q.value = 0.8;
+    lp.connect(out);
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = 34;
+    const subG = ctx.createGain();
+    subG.gain.value = 0.1;
+    sub.connect(subG).connect(subBus);
+
+    const body = ctx.createOscillator();
+    body.type = 'sawtooth';
+    body.frequency.value = 68;
+    const bodyG = ctx.createGain();
+    bodyG.gain.value = 0.14;
+    body.connect(bodyG).connect(lp);
+
+    const air = ctx.createBufferSource();
+    air.buffer = noiseBuffer(2);
+    air.loop = true;
+    const airBp = ctx.createBiquadFilter();
+    airBp.type = 'bandpass';
+    airBp.frequency.value = 130;
+    airBp.Q.value = 1.1;
+    const airG = ctx.createGain();
+    airG.gain.value = 0.07;
+    air.connect(airBp).connect(airG).connect(lp);
+
+    sub.start();
+    body.start();
+    air.start();
+
+    return { out, lp, sub, body, subG, airBp };
+  }
+
+  /** Le contexte n'est créé qu'au premier geste. */
+  function ensureCtx() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!context && !AC) return;
+    ctx = context || new AC({ latencyHint: 'interactive' });
+
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 1;
+
+    // Limiteur de sortie. Sans lui, un impact grave saturé plus le réacteur
+    // suffisaient à écrêter la moitié des échantillons — mesuré sur un rendu
+    // hors ligne : plus rien d'autre ne passait.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -8;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.14;
+    master.connect(limiter).connect(ctx.destination);
+
+    // Bus des graves. Le gain d'entrée est délibérément bas : la saturation
+    // doit mordre sur les transitoires, pas sur le ronflement continu.
+    const saturator = ctx.createWaveShaper();
+    saturator.curve = saturationCurve();
+    saturator.oversample = '2x';
+    const subLp = ctx.createBiquadFilter();
+    subLp.type = 'lowpass';
+    subLp.frequency.value = 240;
+    const subOut = ctx.createGain();
+    subOut.gain.value = 0.55;
+    subBus = ctx.createGain();
+    subBus.gain.value = 0.42;
+    subBus.connect(saturator).connect(subLp).connect(subOut).connect(master);
+
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = 0.95;
+    sfxBus.connect(master);
+
+    // un delay court donne de l'espace sans réverbération coûteuse
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = 0.21;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.3;
+    const damp = ctx.createBiquadFilter();
+    damp.type = 'lowpass';
+    damp.frequency.value = 2400;
+    delay.connect(damp).connect(fb).connect(delay);
+    const spaceOut = ctx.createGain();
+    spaceOut.gain.value = 0.3;
+    delay.connect(spaceOut).connect(master);
+    spaceSend = ctx.createGain();
+    spaceSend.connect(delay);
+
+    const voiceBus = ctx.createGain();
+    voiceBus.gain.value = 1.5;
+    voiceBus.connect(master);
+    const voiceSpace = ctx.createGain();
+    voiceSpace.gain.value = 0.16;
+    voiceBus.connect(voiceSpace).connect(spaceSend);
+
+    voice = createVoice(ctx, voiceBus);
+    engine = buildEngine();
+  }
+
   return {
     element,
+    /** Construit le graphe sans attendre un geste : pour le rendu hors ligne. */
+    prime() { ensureCtx(); },
+    get context() { return ctx; },
     get playing() { return playing; },
     get failed() { return failed; },
     get muted() { return muted; },
@@ -107,7 +230,6 @@ export function createAudio() {
       return p || Promise.resolve();
     },
 
-    /** Nouvelle tentative, depuis un autre geste, si la première a été refusée. */
     retry() {
       if (playing) return Promise.resolve(true);
       ensureCtx();
@@ -123,7 +245,7 @@ export function createAudio() {
     toggleMute() {
       muted = !muted;
       element.muted = muted;
-      if (sfxBus) sfxBus.gain.value = muted ? 0 : 0.9;
+      if (master) master.gain.value = muted ? 0 : 1;
       return muted;
     },
 
@@ -138,7 +260,7 @@ export function createAudio() {
     },
 
     /**
-     * Cale la vitesse de lecture sur celle du bolide.
+     * Cale la vitesse de lecture et le réacteur sur celle du bolide.
      *
      * @param {number} normalized 0 à l'arrêt, 1 à la vitesse maximale
      * @param {number} boost 1 pendant une survitesse
@@ -146,8 +268,8 @@ export function createAudio() {
      * @param {number} dt
      */
     setSpeed(normalized, boost, turbo, dt) {
-      let target = MUSIC.rateIdle
-        + (MUSIC.rateMax - MUSIC.rateIdle) * clamp(normalized, 0, 1);
+      const n = clamp(normalized, 0, 1.3);
+      let target = MUSIC.rateIdle + (MUSIC.rateMax - MUSIC.rateIdle) * clamp(n, 0, 1);
       if (boost > 0) target += (MUSIC.rateBoost - MUSIC.rateMax) * clamp(boost, 0, 1);
       if (turbo > 0) target += (MUSIC.rateTurbo - MUSIC.rateBoost) * clamp(turbo, 0, 1);
 
@@ -160,17 +282,29 @@ export function createAudio() {
         if (Math.abs(element.playbackRate - rate) > 0.004) element.playbackRate = rate;
       }
       fallbackTime += dt * rate;
+
+      if (engine) {
+        const t = ctx.currentTime;
+        const f = 30 + n * 58;
+        engine.sub.frequency.setTargetAtTime(f, t, 0.12);
+        engine.body.frequency.setTargetAtTime(f * 2.02, t, 0.12);
+        engine.lp.frequency.setTargetAtTime(150 + n * 420, t, 0.15);
+        engine.airBp.frequency.setTargetAtTime(110 + n * 220, t, 0.15);
+        engine.out.gain.setTargetAtTime(0.035 + n * 0.075, t, 0.2);
+        engine.subG.gain.setTargetAtTime(0.06 + n * 0.13, t, 0.2);
+      }
+    },
+
+    /** Coupe le réacteur quand on n'est plus aux commandes. */
+    idleEngine() {
+      if (!engine) return;
+      engine.out.gain.setTargetAtTime(0.012, ctx.currentTime, 0.4);
+      engine.subG.gain.setTargetAtTime(0.03, ctx.currentTime, 0.4);
     },
 
     /**
      * Plongeon de hauteur à l'impact : la bande ralentit d'un coup, puis
      * `setSpeed` la ramène toute seule par son lissage.
-     *
-     * On avait d'abord essayé un bégaiement par repositionnement de la
-     * lecture. Mauvaise idée : un serveur qui ne gère pas les requêtes par
-     * plage — `python -m http.server`, par exemple — ne sait pas repositionner
-     * un média, et la lecture repartait du début. Jouer sur la vitesse ne
-     * dépend, lui, de rien.
      */
     dip(strength = 1) {
       if (!playing || muted) return;
@@ -181,102 +315,178 @@ export function createAudio() {
       element.playbackRate = rate;
     },
 
-    /** Note courte des portiques rythmiques. */
-    note(freq) {
+    /** L'annonceur. @see voice.js */
+    say(word, options) {
+      if (!voice) return 0;
+      return voice.say(word, options);
+    },
+
+    /**
+     * Note des portiques rythmiques : un pincement filtré plutôt qu'un bip
+     * carré, avec son octave grave sous la ligne.
+     */
+    note(freq, when = 0) {
       if (!ctx) return;
-      const t = ctx.currentTime + 0.005;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
+      const t = ctx.currentTime + 0.005 + when;
+
       const lp = ctx.createBiquadFilter();
-      o.type = 'square';
-      o.frequency.value = freq;
       lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(5200, t);
-      lp.frequency.exponentialRampToValueAtTime(900, t + 0.2);
-      envelope(g.gain, t, 0.12, 0.004, 0.17);
-      o.connect(lp).connect(g).connect(sfxBus);
-      o.start(t);
-      o.stop(t + 0.28);
+      lp.Q.value = 7;
+      lp.frequency.setValueAtTime(freq * 7, t);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(180, freq * 1.3), t + 0.2);
+
+      const g = ctx.createGain();
+      envelope(g.gain, t, 0.13, 0.005, 0.22);
+      lp.connect(g);
+      g.connect(sfxBus);
+      g.connect(spaceSend);
+
+      for (const detune of [-7, 7]) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = freq;
+        o.detune.value = detune;
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + 0.32);
+      }
+
+      // octave grave, envoyée au bus des graves
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.value = freq / 2;
+      envelope(subG.gain, t, 0.16, 0.006, 0.18);
+      sub.connect(subG).connect(subBus);
+      sub.start(t);
+      sub.stop(t + 0.3);
     },
 
-    /** Choc contre un mur ou un adversaire. */
-    hit(force = 1) {
+    /** Choc contre un mur ou un adversaire : un vrai coup dans le ventre. */
+    hit(force = 1, when = 0) {
       if (!ctx) return;
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + when;
+
+      // le grave : descente profonde, longue traîne, saturée pour s'entendre
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(120, t);
+      sub.frequency.exponentialRampToValueAtTime(27, t + 0.22);
+      envelope(subG.gain, t, 0.8 * force, 0.004, 0.75);
+      sub.connect(subG).connect(subBus);
+      sub.start(t);
+      sub.stop(t + 1.0);
+
+      // la tôle : du bruit sombre, pas un crissement aigu
       const src = ctx.createBufferSource();
-      src.buffer = noise(0.3);
+      src.buffer = noiseBuffer(0.4);
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(1400, t);
-      bp.frequency.exponentialRampToValueAtTime(220, t + 0.25);
-      bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(900, t);
+      bp.frequency.exponentialRampToValueAtTime(140, t + 0.3);
+      bp.Q.value = 0.9;
       const g = ctx.createGain();
-      envelope(g.gain, t, 0.5 * force, 0.003, 0.26);
-      src.connect(bp).connect(g).connect(sfxBus);
+      envelope(g.gain, t, 0.42 * force, 0.003, 0.3);
+      src.connect(bp).connect(g);
+      g.connect(sfxBus);
+      g.connect(spaceSend);
       src.start(t);
-      src.stop(t + 0.35);
-
-      const thud = ctx.createOscillator();
-      const tg = ctx.createGain();
-      thud.type = 'sine';
-      thud.frequency.setValueAtTime(120, t);
-      thud.frequency.exponentialRampToValueAtTime(38, t + 0.16);
-      envelope(tg.gain, t, 0.65 * force, 0.004, 0.2);
-      thud.connect(tg).connect(sfxBus);
-      thud.start(t);
-      thud.stop(t + 0.3);
+      src.stop(t + 0.45);
     },
 
-    /** Plaque de survitesse. */
-    boost() {
+    /** Plaque de survitesse : montée, avec un gonflement grave dessous. */
+    boost(when = 0) {
       if (!ctx) return;
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + when;
       const src = ctx.createBufferSource();
-      src.buffer = noise(0.9);
+      src.buffer = noiseBuffer(0.9);
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.Q.value = 2.4;
-      bp.frequency.setValueAtTime(300, t);
-      bp.frequency.exponentialRampToValueAtTime(5200, t + 0.5);
+      bp.Q.value = 2.2;
+      bp.frequency.setValueAtTime(260, t);
+      bp.frequency.exponentialRampToValueAtTime(4200, t + 0.5);
       const g = ctx.createGain();
-      envelope(g.gain, t, 0.32, 0.05, 0.6);
-      src.connect(bp).connect(g).connect(sfxBus);
+      envelope(g.gain, t, 0.26, 0.05, 0.6);
+      src.connect(bp).connect(g);
+      g.connect(sfxBus);
+      g.connect(spaceSend);
       src.start(t);
       src.stop(t + 0.95);
+
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(44, t);
+      sub.frequency.exponentialRampToValueAtTime(78, t + 0.45);
+      envelope(subG.gain, t, 0.5, 0.08, 0.45);
+      sub.connect(subG).connect(subBus);
+      sub.start(t);
+      sub.stop(t + 0.7);
     },
 
-    /** Turbo au double-appui : plus bas, plus brutal. */
-    turbo() {
+    /** Turbo : un décrochage de grave, puis la montée. */
+    turbo(when = 0) {
       if (!ctx) return;
-      const t = ctx.currentTime;
-      for (const [type, f0, f1, peak] of [
-        ['sawtooth', 70, 540, 0.3],
-        ['square', 140, 1080, 0.14],
-      ]) {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = type;
-        o.frequency.setValueAtTime(f0, t);
-        o.frequency.exponentialRampToValueAtTime(f1, t + 0.42);
-        envelope(g.gain, t, peak, 0.02, 0.5);
-        o.connect(g).connect(sfxBus);
-        o.start(t);
-        o.stop(t + 0.7);
-      }
+      const t = ctx.currentTime + when;
+
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(90, t);
+      sub.frequency.exponentialRampToValueAtTime(24, t + 0.16);
+      sub.frequency.exponentialRampToValueAtTime(62, t + 0.55);
+      envelope(subG.gain, t, 0.9, 0.006, 0.75);
+      sub.connect(subG).connect(subBus);
+      sub.start(t);
+      sub.stop(t + 1.0);
+
+      const sweep = ctx.createOscillator();
+      const sweepG = ctx.createGain();
+      const lp = ctx.createBiquadFilter();
+      sweep.type = 'sawtooth';
+      sweep.frequency.setValueAtTime(58, t);
+      sweep.frequency.exponentialRampToValueAtTime(430, t + 0.45);
+      lp.type = 'lowpass';
+      lp.Q.value = 9;
+      lp.frequency.setValueAtTime(300, t);
+      lp.frequency.exponentialRampToValueAtTime(3200, t + 0.4);
+      envelope(sweepG.gain, t, 0.2, 0.02, 0.5);
+      sweep.connect(lp).connect(sweepG);
+      sweepG.connect(sfxBus);
+      sweepG.connect(spaceSend);
+      sweep.start(t);
+      sweep.stop(t + 0.75);
     },
 
-    /** Bip du décompte ; `high` pour le départ. */
-    beep(high = false) {
+    /**
+     * Repère du décompte : un coup sourd, pas un bip. `high` marque le départ
+     * et monte d'une quinte.
+     */
+    tick(high = false, when = 0) {
       if (!ctx) return;
-      const t = ctx.currentTime;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'square';
-      o.frequency.value = high ? 1320 : 660;
-      envelope(g.gain, t, 0.2, 0.004, high ? 0.5 : 0.18);
-      o.connect(g).connect(sfxBus);
-      o.start(t);
-      o.stop(t + 0.7);
+      const t = ctx.currentTime + when;
+
+      const sub = ctx.createOscillator();
+      const subG = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(high ? 110 : 76, t);
+      sub.frequency.exponentialRampToValueAtTime(high ? 48 : 36, t + 0.18);
+      envelope(subG.gain, t, high ? 0.75 : 0.5, 0.004, high ? 0.6 : 0.34);
+      sub.connect(subG).connect(subBus);
+      sub.start(t);
+      sub.stop(t + 0.8);
+
+      const click = ctx.createBufferSource();
+      click.buffer = noiseBuffer(0.05);
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1400;
+      const cg = ctx.createGain();
+      envelope(cg.gain, t, 0.1, 0.001, 0.04);
+      click.connect(hp).connect(cg).connect(sfxBus);
+      click.start(t);
+      click.stop(t + 0.08);
     },
   };
 }

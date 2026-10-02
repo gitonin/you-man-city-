@@ -120,6 +120,30 @@ mesure le long du circuit, une lumière qui en fait le tour à la noire, un coup
 de corruption sur chaque temps fort, deux filets qui pulsent dans le HUD, et
 une note de la gamme quand on passe sous un portique.
 
+**L'annonceur.** Les voix sont synthétisées, sans aucun fichier son
+(`src/voice.js`). Le principe est celui des synthétiseurs vocaux d'époque : une
+dent de scie à hauteur fixe — d'où le timbre de robot — traverse trois filtres
+passe-bande réglés sur les **formants**, ces résonances du conduit vocal qui
+font qu'on entend un « a » plutôt qu'un « i ». On fait glisser les trois
+fréquences d'un phonème au suivant, on remplace la source par du bruit pour les
+sifflantes, on coupe net pour les occlusives, et la parole apparaît. Une
+modulation en anneau ajoute le grain numérique sans rendre le mot
+incompréhensible.
+
+Le vocabulaire tient en onze mots — décompte, tour, dernier tour, turbo,
+bouclier, arrivée, vainqueur — écrits en phonèmes dans `WORDS`. Vérifié sur un
+rendu hors ligne : le /a/ de « partez » culmine à 725 Hz pour 730 attendus, le
+/ø/ de « deux » à 400 et 1575 Hz pour 400 et 1600, et le « un » ressort
+nasalisé, sans aigus.
+
+**Les graves.** Un réacteur gronde en continu, sa hauteur suivant la vitesse,
+et chaque impact envoie une descente jusqu'à 27 Hz. Comme un haut-parleur de
+téléphone ne restitue pas ces fréquences, le bus des graves passe par une
+saturation douce : elle fabrique les harmoniques, et l'oreille reconstitue la
+fondamentale qu'elle n'entend pas. Un limiteur ferme la marche — sans lui, un
+impact saturé plus le réacteur écrêtaient la moitié des échantillons, mesuré
+sur un rendu hors ligne, et plus rien d'autre ne passait.
+
 **Le plongeon.** À l'impact, la vitesse de lecture tombe d'un coup puis
 remonte avec le lissage : la bande fait un « wow » de magnétophone qu'on
 encaisse en même temps que le mur. On avait d'abord essayé un bégaiement par
@@ -151,7 +175,8 @@ src/
   controls.js       gyroscope, manette au doigt, clavier
   hud.js            tableau de bord et sa fonte matricielle 5×7
   post.js           passe finale : tube cathodique, glitch, pluie, tramage
-  audio.js          lecture, vitesse variable, numérisation, bruitages
+  audio.js          lecture, vitesse variable, graves, réacteur, bruitages
+  voice.js          annonceur : synthèse par formants, sans fichier son
   store.js          meilleurs temps et préférences
   ui.js             menus, scores, pause, arrivée
 vendor/three/       Three.js r169 (MIT)

@@ -156,6 +156,8 @@ let lastBeep = -1;
 let topSpeed = 0;
 let fade = 0;
 let glitchOverride = null;
+/** L'annonceur ne prévient qu'une fois par course du bouclier bas. */
+let shieldWarned = false;
 const glitch = { hit: 0, burst: 0, burstTime: 0, nextRoll: 0 };
 
 const clock = new Clock();
@@ -203,6 +205,7 @@ async function startRace(themeId) {
   topSpeed = 0;
   countdown = RACE.countdown;
   lastBeep = -1;
+  shieldWarned = false;
   phase = 'countdown';
   ui.hideAll();
 
@@ -249,6 +252,7 @@ function finishRace() {
   const records = store.record(world.theme.id, {
     total: s.totalTime, lap: s.bestLap, rank,
   });
+  audio.say(rank === 1 ? 'vainqueur' : 'arrivee', { level: 1.05, when: 0.2 });
   ui.showResults(result, records);
 }
 
@@ -333,6 +337,7 @@ function frame() {
   let sub = '';
 
   if (phase === 'paused') {
+    audio.idleEngine();
     post.render(scene, camera);
     return;
   }
@@ -343,12 +348,14 @@ function frame() {
     countdown -= dt;
     const n = Math.ceil(countdown);
     if (n !== lastBeep && n > 0) {
-      audio.beep(false);
+      audio.tick(false);
+      audio.say(['', 'un', 'deux', 'trois'][Math.min(n, 3)]);
       lastBeep = n;
     }
     if (countdown <= 0) {
       phase = 'racing';
-      audio.beep(true);
+      audio.tick(true);
+      audio.say('partez', { level: 1.1 });
     } else {
       center = String(Math.max(1, n));
       sub = 'GLISSER VERS LE HAUT POUR ACCELERER';
@@ -389,8 +396,23 @@ function frame() {
     audio.dip(1);
   }
   if (ship.state.boostedThisFrame) audio.boost();
-  if (ship.state.turboThisFrame) audio.turbo();
-  if (ship.state.lapThisFrame && !ship.state.finished) audio.beep(true);
+  if (ship.state.turboThisFrame) {
+    audio.turbo();
+    audio.say('turbo', { level: 0.9, rate: 1.1 });
+  }
+  if (ship.state.lapThisFrame && !ship.state.finished) {
+    audio.tick(true);
+    if (ship.state.lap === RACE.laps - 1) {
+      audio.say('dernier', { when: 0.12 });
+      audio.say('tour', { when: 0.56 });
+    } else {
+      audio.say('tour', { when: 0.12 });
+    }
+  }
+  if (phase === 'racing' && !shieldWarned && ship.state.shield < 32) {
+    shieldWarned = true;
+    audio.say('bouclier', { level: 0.95, ring: 0.5 });
+  }
   if (ship.state.finished && phase === 'racing') finishRace();
 
   topSpeed = Math.max(topSpeed, ship.state.speed);
@@ -402,6 +424,8 @@ function frame() {
     ship.state.turbo > 0 ? 1 : 0,
     dt
   );
+  // derrière les menus, le bolide roule mais personne ne pilote : pas de réacteur
+  if (demo) audio.idleEngine();
 
   const beatPulse = world ? world.rhythm.state.pulse : 0;
   const glitchLevel = updateGlitch(dt, speedNorm, beatPulse);
@@ -449,6 +473,8 @@ frame();
 // Fenêtre de réglage : pratique pour ajuster sans recharger.
 window.REBORN = {
   scene, camera, ship, controls, audio, post, hud, store, ui,
+  /** Permet de rendre la bande sonore hors ligne, pour l'écouter. */
+  createAudio,
   get world() { return world; },
   get phase() { return phase; },
   setGlitch(v) { glitchOverride = v; },
