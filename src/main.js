@@ -457,11 +457,34 @@ function frame() {
     camera.updateProjectionMatrix();
   }
 
+  // si la lecture s'étrangle malgré tout, on le dit plutôt que de laisser
+  // l'utilisateur croire à un bug
+  ui.setSoundStarving(audio.starving && !audio.buffered);
+
+  // le diagnostic ne sert que là où on le lit
+  if (ui.current === 'controls' && hudTick % 20 === 0) {
+    const el = audio.element;
+    const end = el.buffered.length ? el.buffered.end(el.buffered.length - 1) : 0;
+    ui.setDiagnostic([
+      `lecture   ${audio.playing ? 'oui' : 'non'}${audio.muted ? ' (coupé)' : ''}`,
+      `préchargé ${audio.buffered ? 'oui' : 'non'} · tampon ${end.toFixed(0)} s / ${(el.duration || 0).toFixed(0)} s`,
+      `vitesse   x${el.playbackRate.toFixed(2)} · position ${el.currentTime.toFixed(0)} s`,
+      `état      readyState ${el.readyState}${el.error ? ` · erreur ${el.error.code}` : ''}`,
+    ].join('\n'));
+  }
+
   watchPerformance(dt);
   post.render(scene, camera);
 }
 
 // ------------------------------------------------------------------- départ
+
+// Le morceau part en mémoire tout de suite : aucun geste n'est requis pour un
+// `fetch`, et c'est la seule façon que la lecture ne dépende plus du réseau
+// une fois qu'on accélère.
+audio.load((ratio) => ui.setMusicProgress(ratio)).then((ok) => {
+  ui.setMusicProgress(ok ? 1 : -1);
+});
 
 loadTrack(THEMES[0].id);
 resize();

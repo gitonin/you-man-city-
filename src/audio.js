@@ -29,7 +29,9 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  */
 export function createAudio({ context = null } = {}) {
   const element = new Audio();
-  element.src = MUSIC.src;
+  // La source n'est posée qu'une fois le morceau en mémoire (ou le
+  // préchargement échoué). La poser ici ferait télécharger le fichier deux
+  // fois : une pour le flux, une pour le `fetch`.
   element.loop = true;
   element.preload = 'auto';
   element.volume = MUSIC.volume; // ignoré sur iOS, sans conséquence
@@ -47,6 +49,14 @@ export function createAudio({ context = null } = {}) {
   let playing = false;
   let muted = false;
   let failed = false;
+  /** Le morceau tient-il entièrement en mémoire ? */
+  let buffered = false;
+  let objectUrl = null;
+  /** Vrai quand la lecture s'est arrêtée faute de données. */
+  let starving = false;
+  /** Le joueur a demandé le son avant que la source soit prête. */
+  let wantsPlay = false;
+  let sourceReady = false;
   let rate = MUSIC.rateIdle;
   let lastDip = 0;
   /** Horloge de secours quand le navigateur refuse la lecture. */
@@ -59,9 +69,74 @@ export function createAudio({ context = null } = {}) {
   }
   setPreservesPitch(false);
 
-  element.addEventListener('playing', () => { playing = true; failed = false; });
+  element.addEventListener('playing', () => { playing = true; failed = false; starving = false; });
   element.addEventListener('pause', () => { playing = false; });
   element.addEventListener('error', () => { failed = true; playing = false; });
+  // `waiting` est l'aveu du navigateur : il n'a plus de quoi jouer.
+  element.addEventListener('waiting', () => { starving = true; });
+  element.addEventListener('canplaythrough', () => { starving = false; });
+
+  /**
+   * Charge tout le morceau en mémoire, puis bascule l'élément dessus.
+   *
+   * Sans ça, la lecture se nourrit du réseau au fil de l'eau — et comme la
+   * vitesse de lecture suit celle du bolide, accélérer fait consommer le
+   * fichier plus vite qu'il n'arrive. Mesuré sur une connexion à 144 kb/s avec
+   * un morceau encodé à 160 : à ×0,68 la lecture avance normalement, à ×1,5
+   * elle n'avance plus que de 5,4 s en 8 s, c'est-à-dire qu'elle s'interrompt
+   * en permanence. Cinq mégaoctets en mémoire valent mieux que ça.
+   *
+   * @param {(ratio:number) => void} [onProgress]
+   * @returns {Promise<boolean>} faux si on reste sur la lecture au fil de l'eau
+   */
+  async function load(onProgress) {
+    if (buffered) return true;
+    try {
+      const res = await fetch(MUSIC.src, { cache: 'force-cache' });
+      if (!res.ok) throw new Error(String(res.status));
+
+      const total = Number(res.headers.get('content-length')) || 0;
+      let blob;
+      const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+      if (reader) {
+        const chunks = [];
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (onProgress) onProgress(total ? received / total : 0);
+        }
+        blob = new Blob(chunks, { type: 'audio/mpeg' });
+      } else {
+        blob = await res.blob();
+      }
+
+      objectUrl = URL.createObjectURL(blob);
+      setSource(objectUrl);
+      buffered = true;
+      if (onProgress) onProgress(1);
+      return true;
+    } catch {
+      // réseau capricieux ou `fetch` interdit : on retombe sur le flux direct,
+      // qui marche tant qu'on n'accélère pas trop
+      buffered = false;
+      setSource(MUSIC.src);
+      return false;
+    }
+  }
+
+  /** Pose la source et rattrape une demande de lecture arrivée trop tôt. */
+  function setSource(url) {
+    element.src = url;
+    element.load();
+    sourceReady = true;
+    if (wantsPlay) {
+      wantsPlay = false;
+      element.play().then(() => { playing = true; }).catch(() => { playing = false; });
+    }
+  }
 
   /**
    * Écrêtage doux. Les graves très bas ne sortent pas d'un haut-parleur de
@@ -207,8 +282,13 @@ export function createAudio({ context = null } = {}) {
 
   return {
     element,
+    load,
     /** Construit le graphe sans attendre un geste : pour le rendu hors ligne. */
     prime() { ensureCtx(); },
+    /** Le morceau est-il entièrement en mémoire ? */
+    get buffered() { return buffered; },
+    /** La lecture manque-t-elle de données en ce moment ? */
+    get starving() { return starving; },
     get context() { return ctx; },
     get playing() { return playing; },
     get failed() { return failed; },
@@ -223,7 +303,13 @@ export function createAudio({ context = null } = {}) {
     start() {
       ensureCtx();
       setPreservesPitch(false);
-      element.playbackRate = clamp(rate, 0.25, 4);
+      if (!sourceReady) {
+        // le morceau n'est pas encore là : on note l'intention, `setSource`
+        // la rattrapera
+        wantsPlay = true;
+        return Promise.resolve();
+      }
+      element.playbackRate = clamp(rate, MUSIC.rateFloor, MUSIC.rateCeiling);
       const p = element.play();
       if (p && p.then) p.then(() => { playing = true; }).catch(() => { playing = false; });
       else playing = true;
@@ -233,6 +319,7 @@ export function createAudio({ context = null } = {}) {
     retry() {
       if (playing) return Promise.resolve(true);
       ensureCtx();
+      if (!sourceReady) { wantsPlay = true; return Promise.resolve(false); }
       const p = element.play();
       return (p && p.then ? p : Promise.resolve())
         .then(() => { playing = true; return true; })
@@ -275,7 +362,7 @@ export function createAudio({ context = null } = {}) {
 
       const k = 1 - Math.exp(-dt / Math.max(0.01, MUSIC.smoothing));
       rate += (target - rate) * k;
-      rate = clamp(rate, 0.25, 4);
+      rate = clamp(rate, MUSIC.rateFloor, MUSIC.rateCeiling);
       if (playing) {
         // on n'écrit que si ça bouge vraiment : certains navigateurs mobiles
         // hoquettent si on repose la valeur à chaque image
@@ -311,7 +398,7 @@ export function createAudio({ context = null } = {}) {
       const now = performance.now();
       if (now - lastDip < 450) return;
       lastDip = now;
-      rate = clamp(rate * (1 - 0.4 * clamp(strength, 0, 1)), 0.25, 4);
+      rate = clamp(rate * (1 - 0.4 * clamp(strength, 0, 1)), MUSIC.rateFloor, MUSIC.rateCeiling);
       element.playbackRate = rate;
     },
 

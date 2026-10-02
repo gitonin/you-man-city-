@@ -34,6 +34,26 @@ export function createUi(store, handlers) {
   };
   const chrome = $('race-chrome');
   const soundAlert = $('sound-alert');
+  const musicLoad = $('music-load');
+  const diag = $('audio-diag');
+  const musicBar = musicLoad.querySelector('i');
+  const musicLabel = musicLoad.querySelector('span');
+
+  // L'alerte sonore a trois causes possibles ; une seule pastille les porte.
+  const sound = { blocked: false, failed: false, starving: false };
+  function refreshSound() {
+    if (sound.blocked) {
+      soundAlert.hidden = false;
+      soundAlert.textContent = sound.failed
+        ? 'bande-son illisible — vérifier assets/reborn.mp3'
+        : 'son coupé — toucher pour activer';
+    } else if (sound.starving) {
+      soundAlert.hidden = false;
+      soundAlert.textContent = 'bande-son en cours de chargement…';
+    } else {
+      soundAlert.hidden = true;
+    }
+  }
   const centerChip = $('btn-center');
 
   let current = 'title';
@@ -172,10 +192,45 @@ export function createUi(store, handlers) {
 
     /** Le navigateur a refusé le son : on laisse un moyen de le relancer. */
     setSoundBlocked(blocked, failed = false) {
-      soundAlert.hidden = !blocked;
-      soundAlert.textContent = failed
-        ? 'bande-son illisible — vérifier assets/reborn.mp3'
-        : 'son coupé — toucher pour activer';
+      sound.blocked = blocked;
+      sound.failed = failed;
+      refreshSound();
+    },
+
+    /** La lecture manque de données : on le dit, ce n'est pas une panne. */
+    setSoundStarving(starving) {
+      if (sound.starving === starving) return;
+      sound.starving = starving;
+      refreshSound();
+    },
+
+    /**
+     * État du son, écrit en clair dans l'écran Contrôles. Quand quelque chose
+     * cloche sur un appareil qu'on n'a pas sous la main, c'est cette ligne qui
+     * le dit.
+     */
+    setDiagnostic(text) { diag.textContent = text; },
+
+    /**
+     * Avancement du préchargement du morceau. `-1` signale qu'on n'a pas pu
+     * le mettre en mémoire et qu'on lira au fil de l'eau.
+     */
+    setMusicProgress(ratio) {
+      if (ratio < 0) {
+        musicLoad.hidden = false;
+        musicBar.style.width = '100%';
+        musicLabel.textContent = 'lecture au fil de l’eau';
+        setTimeout(() => { musicLoad.hidden = true; }, 2500);
+        return;
+      }
+      if (ratio >= 1) {
+        musicBar.style.width = '100%';
+        setTimeout(() => { musicLoad.hidden = true; }, 500);
+        return;
+      }
+      musicLoad.hidden = false;
+      musicBar.style.width = `${Math.round(ratio * 100)}%`;
+      musicLabel.textContent = `chargement de la bande-son ${Math.round(ratio * 100)} %`;
     },
   };
 }

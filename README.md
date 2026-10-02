@@ -109,6 +109,22 @@ silencieux, on perd les bruitages, pas la musique.
 | survitesse | ×1.38 |
 | turbo | ×1.50 |
 
+**Le morceau est mis en mémoire avant d'être joué**, et ce n'est pas un luxe.
+Lu au fil de l'eau, il se nourrit du réseau au débit de l'encodage ; comme la
+vitesse de lecture suit celle du bolide, accélérer fait consommer le fichier
+plus vite qu'il n'arrive et la lecture s'arrête. Mesuré, connexion bridée à
+144 kb/s, course à plein régime : au fil de l'eau la position n'avance pas
+d'une seconde en neuf, `readyState` reste à 0 ; préchargé, elle avance de 11,6 s
+en 9 s — la lecture devient complètement indépendante du réseau. Le fichier est
+donc récupéré par `fetch`, assemblé en `Blob`, et l'élément ne reçoit sa source
+qu'à ce moment-là — la poser plus tôt le ferait télécharger deux fois. Une barre
+de progression le montre au lancement, et si le `fetch` échoue on retombe sur le
+flux direct en le disant.
+
+La vitesse de lecture est bornée à **[0.55, 2.0]** : les navigateurs coupent le
+son d'un élément média dont la vitesse sort grossièrement de [0.5, 4], et le
+plongeon à l'impact pouvait descendre à ×0.41 depuis le ralenti.
+
 **Le tempo.** Le fichier a été mesuré : **119 BPM pile**, premier temps à
 46 ms, grille vérifiée du début à la fin du morceau. Comme la position de
 lecture d'un `<audio>` est exprimée en temps de média, elle avance plus vite
@@ -210,7 +226,10 @@ juger l'image ; `REBORN.setGlitch(null)` rend la main.
 ## Compatibilité
 
 WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son démarre au premier
-appui — et se retente à chaque tape tant que le navigateur refuse. Les capteurs
+appui — et se retente à chaque tape tant que le navigateur refuse. L'écran
+**Contrôles** affiche en clair l'état de la lecture — source, `readyState`,
+position, secondes en mémoire, vitesse de lecture, interruptions —, de quoi
+diagnostiquer un appareil qu'on n'a pas sous la main. Les capteurs
 sont demandés au lancement d'une course, après le son : l'inverse ferait perdre
 le contexte de geste et le son serait bloqué. Si la moyenne descend sous 40
 images par seconde, le `devicePixelRatio` retombe à 1 ; la définition interne,

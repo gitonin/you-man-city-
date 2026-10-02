@@ -303,6 +303,20 @@ body {
 }
 .opt b { color: var(--cyan); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
 
+.diag {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(150, 190, 220, 0.16);
+  background: rgba(6, 12, 20, 0.6);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  text-align: left;
+  color: rgba(170, 200, 225, 0.7);
+  white-space: pre-wrap;
+}
+
 .results {
   margin: 0 0 20px;
   display: grid;
@@ -364,6 +378,33 @@ body {
 }
 .chip:active { opacity: 1; }
 .chip[hidden] { display: none; }
+.loadbar {
+  position: relative;
+  margin: 14px auto 0;
+  max-width: 26ch;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.09);
+}
+.loadbar[hidden] { display: none; }
+.loadbar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  transition: width 0.25s ease;
+}
+.loadbar span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(150, 175, 205, 0.5);
+}
+
 #sound-alert {
   position: absolute;
   z-index: 40;

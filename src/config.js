@@ -83,6 +83,13 @@ export const MUSIC = {
   rateMax: 1.22,
   rateBoost: 1.38,
   rateTurbo: 1.5,
+  /**
+   * Bornes de la vitesse de lecture. Les navigateurs coupent le son d'un
+   * élément média dont la vitesse sort grossièrement de [0.5, 4] : on reste
+   * franchement à l'intérieur, plongeon à l'impact compris.
+   */
+  rateFloor: 0.55,
+  rateCeiling: 2.0,
   /** Lissage du changement de vitesse, en secondes. */
   smoothing: 0.35,
   volume: 0.82,
