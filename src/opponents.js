@@ -119,7 +119,7 @@ export function createOpponents(scene, track, theme) {
       racers.push({
         // grille de départ : ils partent devant, le joueur doit remonter
         s: (i + 1) * 17,
-        x: (i % 2 ? 1 : -1) * (3 + (i % 3) * 2.4),
+        x: (i % 2 ? 1 : -1) * limit * (0.26 + (i % 3) * 0.22),
         speed: 0,
         lane: 0,
         laneSeed: rand(0, Math.PI * 2),
@@ -158,8 +158,10 @@ export function createOpponents(scene, track, theme) {
         let lane = Math.sin(r.laneSeed + r.s * r.weave) * limit * 0.55;
         const gap = r.s - player.s;
         if (Math.abs(gap) < 14) {
+          // l'écart d'évitement suit la largeur de la chaussée, sinon sur une
+          // piste large ils s'écartent d'un rien et restent dans les pieds
           const away = Math.sign(r.x - player.x) || 1;
-          lane = clamp(r.x + away * 6, -limit, limit);
+          lane = clamp(r.x + away * limit * 0.42, -limit, limit);
         }
         r.lane = lane;
         r.x += clamp(lane - r.x, -18 * dt, 18 * dt);

@@ -24,7 +24,18 @@ survitesse, les murs et les accrochages coûtent du bouclier.
 Sans gyroscope (ordinateur, ou capteurs refusés) : la moitié gauche de l'écran
 dirige, la moitié droite fait manette ; au clavier, flèches gauche/droite pour
 diriger, haut/bas ou espace pour les gaz, majuscule pour le turbo. Le sens de
-l'inclinaison, la sensibilité et le son se règlent dans **Contrôles**.
+l'inclinaison, la sensibilité, le **format de l'écran** et le son se règlent
+dans **Contrôles**.
+
+**Debout ou couché.** Le cadre de jeu se met en portrait (9/16) ou en paysage
+(16/9) ; c'est la seule chose que le réglage change, tout le reste suit. Le
+tableau de bord prend son unité sur la *hauteur* de la cible de rendu et non
+sur sa largeur, sans quoi il quintuplerait au basculement, et il met vitesse et
+chrono côte à côte dès que le cadre est plus large que haut. Les courses du
+doigt se mesurent sur les côtés de l'appareil et non sur ceux du cadre — un
+téléphone couché a la même diagonale que debout —, donc la manette garde la
+même amplitude et la direction au doigt la même sensibilité. Si l'appareil est
+tenu dans le mauvais sens, un écran le dit.
 
 ## Les quatre circuits
 
@@ -33,9 +44,32 @@ l'inclinaison, la sensibilité et le son se règlent dans **Contrôles**.
 | **NEON KOWLOON** | nuit, néons, tours à fenêtres allumées, deux tunnels |
 | **GREY DISTRICT** | averse, brume épaisse, blocs de béton serrés contre la piste |
 | **CHROMA TUBE** | boyau presque entièrement couvert, voûte en écrans arc-en-ciel |
-| **RING OF DUST** | orbite, aucun sol, météorites et anneaux de poussière |
+| **RING OF DUST** | le vide, aucun sol, aucun mur : les météorites font les bas-côtés |
 
 Les meilleurs temps sont gardés par circuit dans le navigateur.
+
+## L'orbite, qui n'a pas de mur
+
+Les trois premiers circuits sont bordés de murs extrudés le long du ruban. Le
+quatrième n'en a aucun : la piste est une dalle de métal boulonné qui flotte
+dans le noir, et ce sont des météorites plantées de part et d'autre qui disent
+où elle s'arrête — un rocher tous les deux échantillons de chaque côté, étirés
+dans le sens de la marche pour se souder en chaîne continue, et dont le centre
+est repoussé d'au moins leur propre rayon au-delà du bord. Quelle que soit leur
+bosse, aucun ne mord sur la trajectoire : la collision reste le simple écart
+latéral, les rochers sont le mur qu'on voit, pas celui qu'on calcule.
+
+La dalle a une épaisseur et un dessous, sinon le ruban se réduit à une feuille
+de papier dès qu'on le voit de biais — et le tracé monte et descend de cent
+unités, donc on le voit souvent. Des balises se posent dans l'intervalle libre
+entre le bord et la roche : à trois cent trente unités par seconde et dans le
+noir, la bordure seule ne suffit pas à se placer.
+
+Le cockpit change avec le décor : on n'y pilote plus une voiture qui plane mais
+un vaisseau, verrière plus enveloppante et deux éperons avant qui montent dans
+le champ de vision. Les deux carlingues tiennent chacune en une polyligne — le
+bord intérieur de la verrière — triangulée en éventail depuis un point hors
+cadre, si bien qu'un maximum local du tracé devient un éperon.
 
 ## Lancer en local
 
@@ -209,6 +243,7 @@ dans les virages, éviter le joueur quand il arrive à côté.
 
 | Réglage | Fichier | Effet |
 | --- | --- | --- |
+| `TRACK.halfWidth` | track | largeur de la chaussée — tout le reste s'y accroche |
 | `INPUT.throttleTravel` | config | course du doigt pour aller de 0 à plein gaz |
 | `SHIP.corneringDrift` | config | combien le dévers pousse vers l'extérieur |
 | `RACE.opponents` | config | nombre d'adversaires |

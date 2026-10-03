@@ -25,8 +25,16 @@ const rand = (a, b) => a + Math.random() * (b - a);
 
 /** Géométrie du ruban, commune à tous les circuits. */
 export const TRACK = {
-  halfWidth: 13,
-  wallHeight: 7.5,
+  /**
+   * Demi-largeur de la chaussée. Tout le reste s'y accroche — murs, voûtes,
+   * portiques, plaques, trajectoires adverses, muraille de rochers —, donc
+   * cette seule valeur élargit les quatre circuits d'un coup. En contrepartie
+   * d'une piste plus large, la direction gagne en autorité (`SHIP.steerForce`)
+   * pour qu'un bord à l'autre coûte le même temps qu'avant.
+   */
+  halfWidth: 17.5,
+  /** Suit la largeur : des murs restés bas donneraient une piste de plaine. */
+  wallHeight: 9,
   samples: 900,
   tileLength: 26,
   bankStrength: 46,
@@ -227,16 +235,42 @@ export function buildTrack(scene, theme) {
   ));
 
   const wallMat = psxMaterial({ map: makeWallTexture(theme), side: DoubleSide });
-  root.add(
-    new Mesh(extrude(
-      [{ lat: -HW, up: 0, u: 1 }, { lat: -HW - 0.6, up: WH, u: 0 }],
-      { vScale: wallTile, vAcross: true, tint: 0.95 }
-    ), wallMat),
-    new Mesh(extrude(
-      [{ lat: HW + 0.6, up: WH, u: 0 }, { lat: HW, up: 0, u: 1 }],
-      { vScale: wallTile, vAcross: true, tint: 0.95 }
-    ), wallMat)
-  );
+
+  if (theme.walls === 'rocks') {
+    /**
+     * En orbite, il n'y a pas de mur à bâtir : ce sont les météorites du décor
+     * qui bordent la piste. Reste à donner au ruban une épaisseur, sans quoi
+     * il se réduit à une feuille de papier dès qu'on le voit de biais — et on
+     * le voit souvent, le tracé montant et descendant de cent unités.
+     */
+    const D = 2.6;
+    root.add(
+      new Mesh(extrude(
+        [{ lat: -HW, up: 0, u: 1 }, { lat: -HW - 0.5, up: -D, u: 0 }],
+        { vScale: wallTile, vAcross: true, tint: 0.62 }
+      ), wallMat),
+      new Mesh(extrude(
+        [{ lat: HW + 0.5, up: -D, u: 0 }, { lat: HW, up: 0, u: 1 }],
+        { vScale: wallTile, vAcross: true, tint: 0.62 }
+      ), wallMat),
+      // dessous : on le regarde par en bas, d'où l'ombrage retourné
+      new Mesh(extrude(
+        [{ lat: -HW - 0.5, up: -D, u: 0 }, { lat: HW + 0.5, up: -D, u: 1 }],
+        { vScale: roadTile, tint: 0.3, normalSign: -1 }
+      ), wallMat)
+    );
+  } else {
+    root.add(
+      new Mesh(extrude(
+        [{ lat: -HW, up: 0, u: 1 }, { lat: -HW - 0.6, up: WH, u: 0 }],
+        { vScale: wallTile, vAcross: true, tint: 0.95 }
+      ), wallMat),
+      new Mesh(extrude(
+        [{ lat: HW + 0.6, up: WH, u: 0 }, { lat: HW, up: 0, u: 1 }],
+        { vScale: wallTile, vAcross: true, tint: 0.95 }
+      ), wallMat)
+    );
+  }
 
   const tunnelMat = psxMaterial({ map: makeTunnelTexture(theme), side: DoubleSide });
   const ceiling = [

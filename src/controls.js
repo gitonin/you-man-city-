@@ -30,17 +30,36 @@ export function createControls(surface) {
     rawTilt: 0,
   };
 
-  let lastGamma = null;
+  let lastTilt = null;
+
+  /**
+   * Le roulis tel que le ressent la main, quelle que soit la façon de tenir.
+   *
+   * `gamma` est la rotation autour de l'axe long de l'appareil : debout, c'est
+   * bien le geste de volant. Couché, cet axe est passé à l'horizontale et
+   * c'est `beta` qui porte le roulis. On projette donc les deux sur l'axe
+   * horizontal de l'écran, d'après l'angle que le système déclare.
+   *
+   * Un éventuel inversement global reste rattrapable par le réglage « Sens de
+   * l'inclinaison », qui multiplie le résultat.
+   */
+  function rollOf(e) {
+    const deg = (screen.orientation && screen.orientation.angle)
+      ?? window.orientation ?? 0;
+    const a = (deg * Math.PI) / 180;
+    return e.gamma * Math.cos(a) + (e.beta || 0) * Math.sin(a);
+  }
 
   // ------------------------------------------------------------- gyroscope
   function onOrientation(e) {
     if (e.gamma == null) return;
     state.gyroAvailable = true;
-    lastGamma = e.gamma;
+    const roll = rollOf(e);
+    lastTilt = roll;
     if (!state.gyroEnabled) return;
 
-    if (state.calibration === null) state.calibration = e.gamma;
-    let tilt = e.gamma - state.calibration;
+    if (state.calibration === null) state.calibration = roll;
+    let tilt = roll - state.calibration;
     // l'appareil peut sauter d'un repère à l'autre en passant la verticale
     if (tilt > 180) tilt -= 360;
     if (tilt < -180) tilt += 360;
@@ -66,11 +85,11 @@ export function createControls(surface) {
       }
     }
     state.gyroEnabled = true;
-    state.calibration = lastGamma;
+    state.calibration = lastTilt;
     return true;
   }
 
-  const recalibrate = () => { state.calibration = lastGamma; };
+  const recalibrate = () => { state.calibration = lastTilt; };
 
   // ------------------------------------------------------------------ doigt
   /** @type {Map<number, {x:number, y:number, throttle:number, steering:boolean}>} */
@@ -111,13 +130,20 @@ export function createControls(surface) {
     if (!t) return;
     const rect = surface.getBoundingClientRect();
 
+    // Les courses se mesurent sur les côtés de l'appareil, pas sur ceux du
+    // cadre : un téléphone couché a la même diagonale que debout, et le pouce
+    // la même amplitude. Sans ça, basculer en paysage doublait la sensibilité
+    // de la manette et divisait par deux celle de la direction au doigt.
+    const long = Math.max(rect.width, rect.height);
+    const short = Math.min(rect.width, rect.height);
+
     if (t.steering) {
-      state.steer = clamp((e.clientX - t.x) / (rect.width * 0.28), -1, 1);
+      state.steer = clamp((e.clientX - t.x) / (short * 0.28), -1, 1);
       state.source = 'touch';
       return;
     }
     // manette : vers le haut on accélère
-    const travel = rect.height * INPUT.throttleTravel;
+    const travel = long * INPUT.throttleTravel;
     state.throttle = clamp(t.throttle + (t.y - e.clientY) / travel, 0, 1);
   }
 

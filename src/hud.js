@@ -141,11 +141,17 @@ export function createHud() {
     const H = canvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    const m = Math.max(1, Math.floor(W / 150));
+    // L'unité du tableau de bord suit la *hauteur* de la cible de rendu, pas
+    // sa largeur : c'est elle qui reste constante quand on passe le cadre en
+    // paysage. Sur la largeur, le HUD quintuplerait de taille au basculement.
+    const m = Math.max(1, Math.floor(H / 420));
     const big = m * 3;
-    const pad = 9 * m;
-    // le bombement du tube repousse les coins : le bas a besoin de plus d'air
-    const padBottom = 20 * m;
+    /** Cadre couché : la place manque en hauteur, pas en largeur. */
+    const wideHud = W > H * 1.2;
+    // Le bombement du tube repousse les coins, et d'autant plus que l'image
+    // est large : un cadre couché rognait le bandeau haut et le bas.
+    const pad = (wideHud ? 17 : 9) * m;
+    const padBottom = (wideHud ? 38 : 20) * m;
     const rightEdge = W - pad;
 
     if (v.bare) {
@@ -209,14 +215,15 @@ export function createHud() {
     }
 
     // En portrait, vitesse et chrono ne tiennent pas sur la même ligne : on
-    // empile, vitesse en bas puisque c'est elle qu'on surveille.
+    // empile, vitesse en bas puisque c'est elle qu'on surveille. Couché, la
+    // largeur ne manque pas et la hauteur si : on les met côte à côte.
     const speedText = v.speed.toFixed(2);
+    const lt = splitTime(v.lapTime);
     const speedY = barY - 4 * m - 7 * big;
+    const lapY = wideHud ? speedY : speedY - 3 * m - 7 * big;
+
     writeRight(speedText, rightEdge, speedY, big, INK);
     writeRight('KM/H', rightEdge - measure(speedText, big) - 3 * m, speedY + 8 * m, m, DIM);
-
-    const lt = splitTime(v.lapTime);
-    const lapY = speedY - 3 * m - 7 * big;
     write(lt.main, pad, lapY, big, INK);
     write(lt.frac, pad + measure(lt.main, big) + 3 * m, lapY + 8 * m, m, CYAN);
 

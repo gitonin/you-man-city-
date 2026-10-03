@@ -17,6 +17,8 @@ const SENSITIVITY = [
   { label: 'vive', range: 19 },
 ];
 
+const ORIENTATIONS = ['portrait', 'paysage'];
+
 /**
  * Les écrans : titre, circuits, scores, contrôles, pause, arrivée.
  *
@@ -124,8 +126,12 @@ export function createUi(store, handlers) {
     invert.setAttribute('aria-pressed', String(s.invert));
     $('opt-invert-val').textContent = s.invert ? 'inversé' : 'normal';
     $('opt-sens-val').textContent = SENSITIVITY[s.sensitivity].label;
+    $('opt-orient-val').textContent = s.orientation;
     $('opt-sound').setAttribute('aria-pressed', String(s.sound));
     $('opt-sound-val').textContent = s.sound ? 'activé' : 'coupé';
+    // Le format du cadre est une affaire de feuille de style : un attribut sur
+    // le corps du document, et le CSS fait le reste.
+    document.body.dataset.orient = s.orientation;
   }
 
   $('opt-invert').addEventListener('click', () => {
@@ -135,6 +141,12 @@ export function createUi(store, handlers) {
   });
   $('opt-sens').addEventListener('click', () => {
     store.setSetting('sensitivity', (store.settings.sensitivity + 1) % SENSITIVITY.length);
+    syncOptions();
+    handlers.onSettings();
+  });
+  $('opt-orient').addEventListener('click', () => {
+    const next = (ORIENTATIONS.indexOf(store.settings.orientation) + 1) % ORIENTATIONS.length;
+    store.setSetting('orientation', ORIENTATIONS[next]);
     syncOptions();
     handlers.onSettings();
   });

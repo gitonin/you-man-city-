@@ -1,6 +1,15 @@
 const KEY = 'youman.reborn.v1';
 
-const EMPTY = { scores: {}, settings: { invert: false, sensitivity: 1, sound: true } };
+const EMPTY = {
+  scores: {},
+  settings: {
+    invert: false,
+    sensitivity: 1,
+    sound: true,
+    /** 'portrait' ou 'paysage' : format du cadre de jeu. */
+    orientation: 'portrait',
+  },
+};
 
 /**
  * Meilleurs temps et préférences, gardés dans le navigateur.

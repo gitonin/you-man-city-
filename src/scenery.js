@@ -8,6 +8,7 @@ import {
   Group,
   IcosahedronGeometry,
   InstancedMesh,
+  Matrix4,
   Mesh,
   Object3D,
   PlaneGeometry,
@@ -17,6 +18,7 @@ import {
 import { bakeVertexLight, psxMaterial } from './psx.js';
 import {
   makeBuildingTexture,
+  makeGlowTexture,
   makeGroundTexture,
   makeRingTexture,
   makeRockTexture,
@@ -74,7 +76,7 @@ function annulus(inner, outer, segments) {
 export function buildScenery(scene, track, theme) {
   const root = new Group();
   scene.add(root);
-  const { pos, bin } = track.raw;
+  const { pos, tan, nrm, bin } = track.raw;
   const N = track.samples;
   const dummy = new Object3D();
 
@@ -137,22 +139,122 @@ export function buildScenery(scene, track, theme) {
 
   // ------------------------------------------------------------ orbite
   if (theme.scenery === 'space') {
-    // météorites : des icosaèdres bosselés, figés mais tournant lentement
-    const rock = new IcosahedronGeometry(1, 0);
-    const p = rock.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const s = rand(0.72, 1.3);
-      p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s);
-    }
-    rock.computeVertexNormals();
-    bakeGeometry(rock, 0.24, 0.62);
+    /** Météorite : un icosaèdre bosselé au hasard, à vingt faces plates. */
+    const rockGeometry = (lo = 0.72, hi = 1.3) => {
+      const geo = new IcosahedronGeometry(1, 0);
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const s = rand(lo, hi);
+        p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s);
+      }
+      geo.computeVertexNormals();
+      return bakeGeometry(geo, 0.24, 0.62);
+    };
 
-    const COUNT = 220;
-    const rocks = new InstancedMesh(rock, psxMaterial({ map: makeRockTexture() }), COUNT);
+    // --------------------------------------------------- la muraille de rochers
+    /**
+     * Il n'y a pas de mur en orbite : la piste est une dalle nue dans le vide,
+     * et ce sont les météorites plantées de part et d'autre qui disent où elle
+     * s'arrête. Un rocher tous les deux échantillons de chaque côté, étirés
+     * dans le sens de la marche pour se souder en chaîne continue.
+     *
+     * Le centre de chaque caillou est repoussé d'au moins son propre rayon
+     * au-delà du bord : quelle que soit sa bosse, aucun ne mord sur la
+     * trajectoire. La collision, elle, reste le simple écart latéral — les
+     * rochers sont le mur qu'on voit, pas celui qu'on calcule.
+     */
+    const accent = `#${theme.accent.toString(16).padStart(6, '0')}`;
+    const EDGE = track.halfWidth - 0.8;
+    const STEP = 2;
+    const slots = Math.floor(N / STEP);
+
+    const chain = new InstancedMesh(
+      rockGeometry(0.66, 1.3),
+      psxMaterial({ map: makeRockTexture(accent) }),
+      slots * 2
+    );
+    chain.frustumCulled = false;
+
+    const basis = new Matrix4();
+    /** Repère de piste à l'échantillon `i` : X = travers, Y = normale, Z = tangente. */
+    const frameAt = (i, lat, up) => basis.set(
+      bin[i * 3], nrm[i * 3], tan[i * 3],
+      pos[i * 3] + bin[i * 3] * lat + nrm[i * 3] * up,
+      bin[i * 3 + 1], nrm[i * 3 + 1], tan[i * 3 + 1],
+      pos[i * 3 + 1] + bin[i * 3 + 1] * lat + nrm[i * 3 + 1] * up,
+      bin[i * 3 + 2], nrm[i * 3 + 2], tan[i * 3 + 2],
+      pos[i * 3 + 2] + bin[i * 3 + 2] * lat + nrm[i * 3 + 2] * up,
+      0, 0, 0, 1
+    );
+
+    /** @type {{i:number, lat:number, up:number, side:number}[]} */
+    const beaconSlots = [];
+    let k = 0;
+    for (let s = 0; s < slots; s++) {
+      const i = s * STEP;
+      for (const side of [-1, 1]) {
+        const size = rand(9, 18);
+        const lat = side * (EDGE + size * 1.35 + rand(0, size * 0.4));
+        // plus qu'à moitié enfoncés : la crête reste basse, sinon le ciel
+        // disparaît et on ne se croit plus dans l'espace
+        const up = -size * rand(0.08, 0.5);
+        dummy.position.set(0, 0, 0);
+        dummy.rotation.set(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
+        dummy.scale.set(size * rand(0.8, 1.0), size * rand(0.7, 1.1), size * rand(1.0, 1.7));
+        dummy.updateMatrix();
+        chain.setMatrixAt(k++, frameAt(i, lat, up).multiply(dummy.matrix));
+        // la balise se pose dans l'intervalle libre entre le bord de la dalle
+        // et la face intérieure des rochers, sinon elle disparaît dedans
+        if (s % 9 === 4) beaconSlots.push({ i, lat: side * (track.halfWidth - 1.1), up: 7.5, side });
+      }
+    }
+    chain.instanceMatrix.needsUpdate = true;
+    root.add(chain);
+
+    // Balises de bord plantées dans la roche : à 330 unités par seconde et
+    // dans le noir, la bordure de la dalle seule ne suffit pas à se placer.
+    const beacons = new InstancedMesh(
+      new PlaneGeometry(5.2, 5.2),
+      psxMaterial({
+        map: makeGlowTexture(),
+        color: theme.accent,
+        vertexColors: false,
+        affine: false,
+        snap: false,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+        toneMapped: false,
+      }),
+      beaconSlots.length
+    );
+    beacons.frustumCulled = false;
+    beacons.renderOrder = 2;
+    for (let b = 0; b < beaconSlots.length; b++) {
+      const { i, lat, up, side } = beaconSlots[b];
+      // la balise regarde la piste : son axe local Z suit -side × travers
+      const px = pos[i * 3] + bin[i * 3] * lat + nrm[i * 3] * up;
+      const py = pos[i * 3 + 1] + bin[i * 3 + 1] * lat + nrm[i * 3 + 1] * up;
+      const pz = pos[i * 3 + 2] + bin[i * 3 + 2] * lat + nrm[i * 3 + 2] * up;
+      basis.set(
+        tan[i * 3], nrm[i * 3], -side * bin[i * 3], px,
+        tan[i * 3 + 1], nrm[i * 3 + 1], -side * bin[i * 3 + 1], py,
+        tan[i * 3 + 2], nrm[i * 3 + 2], -side * bin[i * 3 + 2], pz,
+        0, 0, 0, 1
+      );
+      beacons.setMatrixAt(b, basis);
+    }
+    beacons.instanceMatrix.needsUpdate = true;
+    root.add(beacons);
+
+    // ------------------------------------------------ le champ de météorites
+    const COUNT = 240;
+    const rocks = new InstancedMesh(rockGeometry(), psxMaterial({ map: makeRockTexture() }), COUNT);
     rocks.frustumCulled = false;
-    for (let k = 0; k < COUNT; k++) {
+    for (let j = 0; j < COUNT; j++) {
       const i = Math.floor(Math.random() * N);
-      const lat = (Math.random() < 0.5 ? -1 : 1) * rand(95, 860);
+      const lat = (Math.random() < 0.5 ? -1 : 1) * rand(70, 860);
       const size = rand(10, 76);
       dummy.position.set(
         pos[i * 3] + bin[i * 3] * lat,
@@ -162,7 +264,7 @@ export function buildScenery(scene, track, theme) {
       dummy.rotation.set(rand(0, 6.28), rand(0, 6.28), rand(0, 6.28));
       dummy.scale.setScalar(size);
       dummy.updateMatrix();
-      rocks.setMatrixAt(k, dummy.matrix);
+      rocks.setMatrixAt(j, dummy.matrix);
     }
     rocks.instanceMatrix.needsUpdate = true;
     root.add(rocks);
@@ -171,6 +273,10 @@ export function buildScenery(scene, track, theme) {
     const ringTex = makeRingTexture();
     const ringMat = psxMaterial({
       map: ringTex,
+      // Additif : la teinte sert de gradateur, et il en faut un franc. À
+      // pleine intensité la poussière ajoutait près d'un demi en linéaire
+      // par-dessus un ciel noir — le bandeau mangeait tout le haut de l'image.
+      color: 0x4e4a3c,
       vertexColors: false,
       snap: false,
       affine: false,
@@ -183,8 +289,8 @@ export function buildScenery(scene, track, theme) {
     });
     for (let k = 0; k < 3; k++) {
       const ring = new Mesh(annulus(1500 + k * 420, 2600 + k * 520, 128), ringMat);
-      ring.rotation.set(0.42 + k * 0.05, k * 1.1, 0.16);
-      ring.position.y = -120 - k * 90;
+      ring.rotation.set(0.4 + k * 0.05, k * 1.1, 0.16);
+      ring.position.y = -200 - k * 100;
       ring.renderOrder = -8;
       root.add(ring);
       spin.push({ object: ring, speed: 0.004 + k * 0.002 });

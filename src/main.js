@@ -35,6 +35,7 @@ const dom = {
   frame: $('frame'),
   canvas: $('view'),
   rotate: $('rotate'),
+  rotateText: $('rotate-text'),
   fail: $('fail'),
 };
 
@@ -141,7 +142,33 @@ function resize() {
   camera.updateProjectionMatrix();
   ship.buildCockpit(aspect, RENDER.fov);
 
-  dom.rotate.hidden = !(window.innerWidth > window.innerHeight && window.innerHeight < 480);
+  // On ne réclame une rotation que si l'appareil contredit le format choisi,
+  // et seulement sur un écran assez petit pour que ça gêne : sur un ordinateur
+  // en fenêtre large, le cadre se contente d'être centré.
+  const wide = window.innerWidth > window.innerHeight;
+  const wantsWide = store.settings.orientation === 'paysage';
+  const tooSmall = Math.min(window.innerWidth, window.innerHeight) < 480;
+  rotateNeeded = wide !== wantsWide && tooSmall;
+  dom.rotateText.innerHTML = wantsWide
+    ? 'Tourner l’appareil<br />à l’horizontale'
+    : 'Tenir l’appareil<br />à la verticale';
+  syncRotate();
+}
+
+/**
+ * Le rappel de rotation ne couvre l'écran que pendant la course.
+ *
+ * Il recouvre tout, menus compris : s'il s'affichait dès le titre, un appareil
+ * tenu à contresens du format enregistré bloquerait l'accès à « Contrôles »,
+ * c'est-à-dire au réglage qui aurait réparé la situation.
+ */
+let rotateNeeded = false;
+let rotateShown = null;
+function syncRotate() {
+  const show = rotateNeeded && (phase === 'racing' || phase === 'countdown');
+  if (show === rotateShown) return;
+  rotateShown = show;
+  dom.rotate.hidden = !show;
 }
 
 window.addEventListener('resize', resize);
@@ -167,6 +194,9 @@ function applySettings() {
   controls.settings.tiltSign = store.settings.invert ? -INPUT.tiltSign : INPUT.tiltSign;
   controls.settings.tiltRange = ui.sensitivityRange;
   if (store.settings.sound === audio.muted) audio.toggleMute();
+  // changer de format redimensionne le cadre : cible de rendu, HUD, cockpit
+  // et grille d'accrochage se recalculent tous là-dedans
+  resize();
 }
 
 const ui = createUi(store, {
@@ -332,6 +362,8 @@ function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  // il dépend de la phase, pas seulement des dimensions : on le suit d'ici
+  syncRotate();
 
   let center = '';
   let sub = '';

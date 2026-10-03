@@ -67,6 +67,8 @@ export function makeRoadTexture(theme) {
   const { el, ctx } = surface(W, H);
   const p = theme.road;
 
+  if (theme.roadStyle === 'plate') return platedRoad(el, ctx, W, H, p);
+
   ctx.fillStyle = p.base;
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 26; i++) {
@@ -98,6 +100,55 @@ export function makeRoadTexture(theme) {
   ctx.fillRect(W * 0.26, 0, 12, H);
   ctx.fillRect(W * 0.66, 0, 12, H);
   ctx.globalAlpha = 1;
+
+  return finish(el);
+}
+
+/**
+ * Variante en orbite : la piste n'est pas une chaussée mais une dalle
+ * d'éléments boulonnés bout à bout, posée sur rien. Les coutures en travers
+ * défilent et donnent la vitesse ; la bordure lumineuse dit où s'arrête le
+ * métal et où commence le vide.
+ */
+function platedRoad(el, ctx, W, H, p) {
+  ctx.fillStyle = p.base;
+  ctx.fillRect(0, 0, W, H);
+
+  // longerons : quatre panneaux dans la largeur
+  for (let x = 0; x < W; x += 32) {
+    ctx.fillStyle = pick(p.shades);
+    ctx.fillRect(x + 1, 0, 30, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x, 0, 1, H);
+  }
+
+  // coutures en travers, tous les deux éléments une plus marquée
+  for (let y = 0; y < H; y += 32) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, y, W, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(0, y + 2, W, 1);
+    // boulons
+    ctx.fillStyle = 'rgba(214, 230, 248, 0.3)';
+    for (let x = 6; x < W; x += 16) ctx.fillRect(x, y + 5, 2, 2);
+  }
+
+  grain(ctx, W, H, 0.08);
+
+  // bordure : hachures lumineuses, le seul repère quand il n'y a plus de sol
+  const edge = 11;
+  for (let y = 0; y < H; y += 8) {
+    ctx.fillStyle = (y / 8) % 2 ? p.kerb[0] : p.kerb[1];
+    ctx.fillRect(0, y, edge, 8);
+    ctx.fillRect(W - edge, y, edge, 8);
+  }
+  ctx.fillStyle = 'rgba(8, 12, 20, 0.75)';
+  ctx.fillRect(edge, 0, 2, H);
+  ctx.fillRect(W - edge - 2, 0, 2, H);
+
+  // axe en pointillé
+  ctx.fillStyle = 'rgba(233, 242, 255, 0.5)';
+  ctx.fillRect(W / 2 - 2, 0, 4, 40);
 
   return finish(el);
 }
@@ -269,10 +320,18 @@ export function makeBuildingTexture(theme) {
   return finish(el);
 }
 
-/** Ciel : dégradé du thème, sur une sphère parcourue du nadir au zénith. */
+/**
+ * Ciel : dégradé du thème, sur une sphère parcourue du nadir au zénith.
+ *
+ * Trente-deux texels de large suffisent à un dégradé, mais pas à un champ
+ * d'étoiles : étirés sur une sphère de mille neuf cents unités, ils donnent
+ * des taches de la taille d'un immeuble. En orbite, où le ciel est le décor,
+ * on peint donc seize fois plus fin.
+ */
 export function makeSkyTexture(theme) {
-  const W = 32;
-  const H = 128;
+  const deep = theme.scenery === 'space';
+  const W = deep ? 512 : 32;
+  const H = deep ? 512 : 128;
   const { el, ctx } = surface(W, H);
 
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -289,11 +348,17 @@ export function makeSkyTexture(theme) {
     ctx.globalAlpha = 1;
   }
 
-  ctx.fillStyle = '#cfe0ff';
-  for (let i = 0; i < theme.stars; i++) {
-    const s = Math.random() < 0.15 ? 2 : 1;
-    ctx.fillRect(rand(0, W), rand(0, H * (theme.scenery === 'space' ? 0.95 : 0.34)), s, s);
+  // la densité suit la surface peinte, sinon le ciel profond est désert
+  const count = deep ? theme.stars * 16 : theme.stars;
+  for (let i = 0; i < count; i++) {
+    const s = Math.random() < 0.12 ? 2 : 1;
+    ctx.globalAlpha = deep ? rand(0.25, 1) : 1;
+    ctx.fillStyle = deep && Math.random() < 0.18
+      ? pick(['#ffd9b0', '#b9d2ff', '#ffeccf'])
+      : '#cfe0ff';
+    ctx.fillRect(rand(0, W), rand(0, H * (deep ? 0.95 : 0.34)), s, s);
   }
+  ctx.globalAlpha = 1;
 
   return finish(el, { mipmaps: false, smooth: true });
 }
@@ -317,16 +382,31 @@ export function makeGroundTexture(theme) {
   return finish(el);
 }
 
-/** Roche des météorites. */
-export function makeRockTexture() {
+/**
+ * Roche des météorites.
+ *
+ * @param {string} [glint] couleur des paillettes de minerai. Les rochers qui
+ *   bordent la piste en portent, teintés de l'accent du circuit : c'est ce qui
+ *   les rend lisibles à pleine vitesse, alors que ceux du lointain restent
+ *   gris et se fondent dans le noir.
+ */
+export function makeRockTexture(glint = null) {
   const W = 64;
   const H = 64;
   const { el, ctx } = surface(W, H);
-  ctx.fillStyle = '#3a3a42';
+  ctx.fillStyle = glint ? '#32333d' : '#3a3a42';
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 90; i++) {
     ctx.fillStyle = pick(['#2d2d35', '#45454f', '#52525e', '#262630']);
     ctx.fillRect(rand(0, W), rand(0, H), rand(3, 12), rand(3, 12));
+  }
+  if (glint) {
+    ctx.fillStyle = glint;
+    for (let i = 0; i < 26; i++) {
+      ctx.globalAlpha = rand(0.2, 0.8);
+      ctx.fillRect(rand(0, W), rand(0, H), rand(1, 3), rand(1, 3));
+    }
+    ctx.globalAlpha = 1;
   }
   grain(ctx, W, H, 0.14);
   return finish(el);

@@ -29,8 +29,12 @@ export const SHIP = {
   brake: 150,
   /** Traînée quadratique : fixe la vitesse de croisière. */
   drag: 0.00052,
-  /** Autorité de la direction sur la dérive latérale. */
-  steerForce: 92,
+  /**
+   * Autorité de la direction sur la dérive latérale. Réglée pour que traverser
+   * la chaussée prenne une seconde environ : si on élargit `TRACK.halfWidth`,
+   * il faut la suivre, sinon le vaisseau devient pataud.
+   */
+  steerForce: 118,
   /** Poussée vers l'extérieur du virage : le dévers se paie. */
   corneringDrift: 0.26,
   steerDamp: 3.1,

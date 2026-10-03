@@ -58,6 +58,29 @@ body {
   #frame { height: 100vh; max-width: calc(100vh * 0.52); }
 }
 
+/* Format couché, au choix dans Contrôles. Le cadre bascule son rapport : au
+   lieu de brider la largeur par la hauteur, on bride la hauteur par la
+   largeur, et on vise le 16/9. */
+body[data-orient="paysage"] #frame {
+  max-width: none;
+  max-height: calc(100vw * 0.5625);
+}
+/* Les écrans sont alors courts et larges : on étale plutôt que d'empiler,
+   sinon le bouton de retour passe sous la ligne de flottaison. */
+body[data-orient="paysage"] .inner { max-width: 46ch; }
+body[data-orient="paysage"] .inner.wide { max-width: 64ch; }
+body[data-orient="paysage"] .cards { grid-template-columns: 1fr 1fr; }
+body[data-orient="paysage"] .opts { grid-template-columns: 1fr 1fr; }
+body[data-orient="paysage"] .howto { grid-template-columns: 1fr 1fr; margin-bottom: 10px; }
+body[data-orient="paysage"] .howto li { padding: 6px 10px; }
+body[data-orient="paysage"] .eyebrow { margin-bottom: 8px; }
+body[data-orient="paysage"] .diag { margin-top: 8px; max-height: 54px; overflow: auto; }
+/* Le logotype prend toute la largeur disponible : couché, cette largeur est
+   celle d'un écran entier, et les boutons passaient sous le bord. */
+body[data-orient="paysage"] .wordmark { width: 52%; margin: 0 auto 8px; }
+body[data-orient="paysage"] .cta { padding: 11px 18px; }
+body[data-orient="paysage"] .blurb { margin-bottom: 14px; }
+
 #view {
   position: absolute;
   inset: 0;
