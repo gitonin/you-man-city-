@@ -409,6 +409,12 @@ body[data-orient="paysage"] .blurb { margin-bottom: 14px; }
   background: rgba(255, 255, 255, 0.09);
 }
 .loadbar[hidden] { display: none; }
+/* Celle du démarrage est la seule chose à regarder : elle a droit à plus. */
+.loadbar.boot { max-width: 100%; height: 3px; margin-top: 26px; }
+.loadbar.boot span { top: 12px; font-size: 10px; color: rgba(190, 215, 240, 0.72); }
+.loadbar.boot i { transition: width 0.18s linear; }
+#boot-note { margin-top: 40px; }
+#screen-boot.failed .loadbar i { background: var(--hot); box-shadow: 0 0 10px var(--hot); }
 .loadbar i {
   display: block;
   height: 100%;

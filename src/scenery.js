@@ -23,6 +23,7 @@ import {
   makeRingTexture,
   makeRockTexture,
   makeSkyTexture,
+  makeWetTexture,
 } from './textures.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -110,6 +111,31 @@ export function buildScenery(scene, track, theme) {
   }
 
   const spin = [];
+  /** Film d'eau : nul hors averse, piloté par l'orage le reste du temps. */
+  let wet = null;
+
+  // ------------------------------------------------------------ chaussée mouillée
+  if (theme.rain > 0) {
+    // Un calque additif plaqué un rien au-dessus du revêtement, dans la même
+    // extrusion : il suit donc le dévers et les bosses sans aucun calcul.
+    const HW = track.halfWidth;
+    const geo = track.extrude(
+      [{ lat: -HW, up: 0.07, u: 0 }, { lat: HW, up: 0.07, u: 1 }],
+      { vScale: 11 }
+    );
+    const mesh = new Mesh(geo, psxMaterial({
+      map: makeWetTexture(theme),
+      vertexColors: false,
+      affine: false,
+      transparent: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    }));
+    mesh.renderOrder = 1;
+    root.add(mesh);
+    wet = { mesh, base: 0.5, shimmer: 0, bolt: 0 };
+  }
 
   // --------------------------------------------------------- tours et blocs
   if (theme.scenery === 'city' || theme.scenery === 'blocks') {
@@ -313,7 +339,20 @@ export function buildScenery(scene, track, theme) {
 
   function update(dt) {
     for (const s of spin) s.object.rotation.y += s.speed * dt;
+    if (wet) {
+      // Scintillement : une surface d'eau sous l'averse ne tient pas en place.
+      // Le reflet d'un éclair, lui, la fait blanchir d'un coup.
+      wet.shimmer += (Math.random() - 0.5) * 0.5;
+      wet.shimmer = Math.max(-0.3, Math.min(0.3, wet.shimmer * 0.86));
+      wet.bolt = Math.max(0, wet.bolt - dt * 7);
+      wet.mesh.material.opacity = wet.base + wet.shimmer + wet.bolt * 2.4;
+    }
   }
 
-  return { root, update };
+  /** L'éclair se reflète par terre : c'est ce qui le rend physique. */
+  function setStorm(bolt) {
+    if (wet) wet.bolt = Math.max(wet.bolt, bolt);
+  }
+
+  return { root, update, setStorm };
 }

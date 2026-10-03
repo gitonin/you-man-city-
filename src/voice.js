@@ -23,56 +23,77 @@ const F = (freq, q, d, amp) => ({ kind: 'fric', freq, q, d, amp });
 /** Occlusive : un silence, puis une détente brève. */
 const S = (freq, amp, gap = 0.035) => ({ kind: 'stop', freq, amp, gap, d: 0.03 });
 
+/**
+ * Les formants de l'anglais américain, d'après les mesures classiques de
+ * Peterson et Barney. Les diphtongues ne sont pas listées : on les écrit comme
+ * deux voyelles d'affilée, et le glissement entre phonèmes les produit tout
+ * seul — c'est précisément ce qu'est une diphtongue.
+ */
 const PHONEMES = {
-  a: V(730, 1090, 2440),
-  e: V(430, 2050, 2600),
-  E: V(610, 1900, 2500),
-  i: V(270, 2290, 3010),
-  o: V(570, 840, 2410),
-  O: V(500, 1000, 2400),
-  u: V(300, 870, 2240),
-  y: V(290, 1700, 2200),
-  2: V(400, 1600, 2300),
-  9: V(500, 1400, 2400),
-  'A~': N(700, 1100, 2400),
-  'O~': N(500, 900, 2300),
-  'E~': N(530, 1480, 2500),
-  '9~': N(500, 1500, 2400),
+  // voyelles
+  i: V(270, 2290, 3010), // fleece
+  I: V(390, 1990, 2550), // kit
+  E: V(530, 1840, 2480), // dress
+  a: V(660, 1720, 2410), // trap
+  A: V(730, 1090, 2440), // lot
+  O: V(570, 840, 2410), // thought
+  U: V(440, 1020, 2240), // foot
+  u: V(300, 870, 2240), // goose
+  V: V(640, 1190, 2390), // strut
+  // schwa, et sa version colorée par le r : c'est le troisième formant qui
+  // s'effondre qui fait entendre le r américain
+  '@': V(500, 1500, 2500, 0.07),
+  R: V(490, 1350, 1690, 0.11),
 
+  // sonantes
   m: N(300, 1100, 2200, 0.085),
   n: N(300, 1700, 2600, 0.085),
-  l: V(360, 1300, 2600, 0.07),
-  j: V(270, 2200, 3000, 0.05),
+  N: N(300, 1900, 2400, 0.09), // -ng
+  l: V(360, 1300, 2600, 0.075),
+  j: V(270, 2200, 3000, 0.05), // y-
   w: V(300, 870, 2240, 0.05),
+  r: V(420, 1150, 1600, 0.06),
 
+  // constrictives
   f: F(5000, 1.2, 0.085, 0.3),
-  v: F(3800, 1.2, 0.07, 0.26),
+  v: F(3800, 1.2, 0.07, 0.24),
+  T: F(5600, 0.9, 0.08, 0.2), // th sourd
+  D: F(3400, 0.9, 0.065, 0.2), // th sonore
   s: F(6500, 2.0, 0.1, 0.4),
   z: F(5200, 2.0, 0.08, 0.3),
-  S: F(3000, 1.4, 0.1, 0.4),
-  R: F(1150, 1.8, 0.075, 0.32),
+  S: F(2800, 1.4, 0.105, 0.42), // sh
+  h: F(1400, 0.7, 0.06, 0.18),
 
+  // occlusives
   p: S(900, 0.42),
-  b: S(650, 0.38),
+  b: S(650, 0.36),
   t: S(3200, 0.5),
   d: S(2500, 0.42),
   k: S(1800, 0.46),
-  g: S(1400, 0.38),
+  g: S(1400, 0.36),
 };
 
-/** Le vocabulaire de la course, en phonèmes. */
+/**
+ * Le vocabulaire de la course, en phonèmes.
+ *
+ * En anglais : c'est la langue des annonceurs de ce genre de jeu, et les
+ * formants anglais se tiennent mieux à ce débit que les voyelles nasales du
+ * français, qui demandaient d'étouffer deux formants sur trois.
+ */
 export const WORDS = {
-  trois: ['t', 'R', 'w', 'a'],
-  deux: ['d', '2'],
-  un: ['9~'],
-  partez: ['p', 'a', 'R', 't', 'e'],
-  tour: ['t', 'u', 'R'],
-  dernier: ['d', 'E', 'R', 'n', 'j', 'e'],
-  turbo: ['t', 'y', 'R', 'b', 'o'],
-  bouclier: ['b', 'u', 'k', 'l', 'i', 'j', 'e'],
-  arrivee: ['a', 'R', 'i', 'v', 'e'],
-  vainqueur: ['v', 'E~', 'k', '9', 'R'],
-  systeme: ['s', 'i', 's', 't', 'E', 'm'],
+  three: ['T', 'r', 'i'],
+  two: ['t', 'u'],
+  one: ['w', 'V', 'n'],
+  go: ['g', 'O', 'U'],
+  lap: ['l', 'a', 'p'],
+  final: ['f', 'a', 'I', 'n', '@', 'l'],
+  turbo: ['t', 'R', 'b', 'O', 'U'],
+  shield: ['S', 'i', 'l', 'd'],
+  boost: ['b', 'u', 's', 't'],
+  finish: ['f', 'I', 'n', 'I', 'S'],
+  winner: ['w', 'I', 'n', 'R'],
+  warning: ['w', 'O', 'r', 'n', 'I', 'N'],
+  systems: ['s', 'I', 's', 't', '@', 'm', 'z'],
 };
 
 /**

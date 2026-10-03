@@ -52,8 +52,28 @@
   <div id="frame">
     <canvas id="view"></canvas>
 
+    <!-- ===================== CHARGEMENT ===================== -->
+    <section id="screen-boot" class="screen">
+      <div class="inner">
+        <div class="wordmark" aria-label="You Man">
+          <svg class="ym" viewBox="-16 -8 514 116" role="img">
+            <use href="#ym-word" class="ym-c" />
+            <use href="#ym-word" class="ym-m" />
+            <use href="#ym-word" class="ym-w" />
+          </svg>
+        </div>
+        <p class="eyebrow">reborn</p>
+        <div id="boot-load" class="loadbar boot">
+          <i></i><span>démarrage</span>
+        </div>
+        <p id="boot-note" class="fineprint">
+          la bande-son est chargée en entier avant la course
+        </p>
+      </div>
+    </section>
+
     <!-- ===================== TITRE ===================== -->
-    <section id="screen-title" class="screen">
+    <section id="screen-title" class="screen" hidden>
       <div class="inner">
         <div class="wordmark" aria-label="You Man">
           <svg class="ym" viewBox="-16 -8 514 116" role="img">
@@ -71,9 +91,6 @@
           <button id="go-controls" class="cta ghosty">Contrôles</button>
         </div>
         <p class="fineprint">You Man — « Reborn » · son requis</p>
-        <div id="music-load" class="loadbar" hidden>
-          <i></i><span>chargement de la bande-son</span>
-        </div>
       </div>
     </section>
 

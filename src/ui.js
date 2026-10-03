@@ -27,6 +27,7 @@ const ORIENTATIONS = ['portrait', 'paysage'];
  */
 export function createUi(store, handlers) {
   const screens = {
+    boot: $('screen-boot'),
     title: $('screen-title'),
     select: $('screen-select'),
     scores: $('screen-scores'),
@@ -36,29 +37,33 @@ export function createUi(store, handlers) {
   };
   const chrome = $('race-chrome');
   const soundAlert = $('sound-alert');
-  const musicLoad = $('music-load');
   const diag = $('audio-diag');
-  const musicBar = musicLoad.querySelector('i');
-  const musicLabel = musicLoad.querySelector('span');
+  const bootLoad = $('boot-load');
+  const bootBar = bootLoad.querySelector('i');
+  const bootLabel = bootLoad.querySelector('span');
+  const bootNote = $('boot-note');
 
-  // L'alerte sonore a trois causes possibles ; une seule pastille les porte.
-  const sound = { blocked: false, failed: false, starving: false };
+  /** Ce que raconte chaque étape du chargement. */
+  const STAGES = {
+    download: 'téléchargement de la bande-son',
+    decode: 'décodage du morceau',
+    ready: 'prêt',
+    failed: 'bande-son indisponible',
+  };
+
+  // Depuis que le morceau est décodé en mémoire avant le départ, il ne reste
+  // qu'une cause possible : le navigateur refuse encore de jouer.
+  const sound = { blocked: false, failed: false };
   function refreshSound() {
-    if (sound.blocked) {
-      soundAlert.hidden = false;
-      soundAlert.textContent = sound.failed
-        ? 'bande-son illisible — vérifier assets/reborn.mp3'
-        : 'son coupé — toucher pour activer';
-    } else if (sound.starving) {
-      soundAlert.hidden = false;
-      soundAlert.textContent = 'bande-son en cours de chargement…';
-    } else {
-      soundAlert.hidden = true;
-    }
+    soundAlert.hidden = !sound.blocked;
+    if (!sound.blocked) return;
+    soundAlert.textContent = sound.failed
+      ? 'bande-son illisible — vérifier assets/reborn.mp3'
+      : 'son coupé — toucher pour activer';
   }
   const centerChip = $('btn-center');
 
-  let current = 'title';
+  let current = 'boot';
 
   function show(name) {
     current = name;
@@ -209,13 +214,6 @@ export function createUi(store, handlers) {
       refreshSound();
     },
 
-    /** La lecture manque de données : on le dit, ce n'est pas une panne. */
-    setSoundStarving(starving) {
-      if (sound.starving === starving) return;
-      sound.starving = starving;
-      refreshSound();
-    },
-
     /**
      * État du son, écrit en clair dans l'écran Contrôles. Quand quelque chose
      * cloche sur un appareil qu'on n'a pas sous la main, c'est cette ligne qui
@@ -224,25 +222,22 @@ export function createUi(store, handlers) {
     setDiagnostic(text) { diag.textContent = text; },
 
     /**
-     * Avancement du préchargement du morceau. `-1` signale qu'on n'a pas pu
-     * le mettre en mémoire et qu'on lira au fil de l'eau.
+     * Avancement du chargement, sur l'écran de démarrage.
+     *
+     * Le décodage d'un MP3 de cinq mégaoctets ne rend pas la main pendant une
+     * à trois secondes : sans étape nommée, la barre semblerait figée à 80 %
+     * et on croirait à un blocage.
      */
-    setMusicProgress(ratio) {
-      if (ratio < 0) {
-        musicLoad.hidden = false;
-        musicBar.style.width = '100%';
-        musicLabel.textContent = 'lecture au fil de l’eau';
-        setTimeout(() => { musicLoad.hidden = true; }, 2500);
-        return;
+    setLoad(ratio, stage) {
+      const pct = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+      bootBar.style.width = `${pct}%`;
+      bootLabel.textContent = stage === 'download'
+        ? `${STAGES.download} ${pct} %`
+        : (STAGES[stage] || stage);
+      if (stage === 'failed') {
+        screens.boot.classList.add('failed');
+        bootNote.textContent = 'le jeu est jouable, mais sans musique ni rythme';
       }
-      if (ratio >= 1) {
-        musicBar.style.width = '100%';
-        setTimeout(() => { musicLoad.hidden = true; }, 500);
-        return;
-      }
-      musicLoad.hidden = false;
-      musicBar.style.width = `${Math.round(ratio * 100)}%`;
-      musicLabel.textContent = `chargement de la bande-son ${Math.round(ratio * 100)} %`;
     },
   };
 }

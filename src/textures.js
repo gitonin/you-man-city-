@@ -428,6 +428,56 @@ export function makeRingTexture() {
   return finish(el, { mipmaps: false, smooth: true });
 }
 
+/**
+ * Film d'eau sur la chaussée.
+ *
+ * Posée en additif juste au-dessus de la piste, et noire presque partout :
+ * seules ressortent les traînées de reflet, étirées dans le sens de la marche
+ * puisque c'est ainsi qu'on voit une route mouillée à cette vitesse, et les
+ * impacts de gouttes. L'axe X est la largeur, l'axe Y la longueur — mêmes
+ * conventions que le revêtement.
+ */
+export function makeWetTexture(theme) {
+  const W = 64;
+  const H = 128;
+  const { el, ctx } = surface(W, H);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // traînées de reflet : des colonnes douces, de longueur inégale
+  for (let i = 0; i < 22; i++) {
+    const x = Math.floor(rand(0, W));
+    const y = Math.floor(rand(0, H));
+    const h = Math.floor(rand(H * 0.2, H * 0.8));
+    const w = Math.floor(rand(1, 4));
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    const tint = pick(theme.windows);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.5, tint);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = rand(0.1, 0.3);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  // impacts de gouttes : des points, et quelques couronnes
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < 150; i++) {
+    const a = rand(0.05, 0.3);
+    ctx.fillStyle = `rgba(200, 220, 245, ${a})`;
+    ctx.fillRect(rand(0, W), rand(0, H), 1, 1);
+  }
+  ctx.strokeStyle = 'rgba(190, 212, 240, 0.22)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 26; i++) {
+    ctx.beginPath();
+    ctx.arc(rand(0, W), rand(0, H), rand(1.5, 4), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  return finish(el, { srgb: false });
+}
+
 /** Portique rythmique : une barre lumineuse. */
 export function makeGateTexture() {
   const W = 32;

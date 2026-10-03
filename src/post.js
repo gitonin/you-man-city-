@@ -39,6 +39,7 @@ uniform float uFlash;
 uniform float uFade;
 uniform float uCurve;
 uniform float uRain;
+uniform float uBolt;
 uniform float uBeat;
 uniform vec3  uTint;
 
@@ -153,6 +154,13 @@ void main() {
   // --- coup contre un mur
   col += vec3(1.0, 0.25, 0.45) * uFlash * 0.4;
 
+  // --- éclair. C'est une lumière : elle agit en linéaire, avant la conversion
+  // d'affichage, et surtout elle *multiplie* la scène au lieu de s'y ajouter.
+  // Ajoutée uniformément, elle relevait aussi le noir et délavait l'image en
+  // une bouillie bleue ; multipliée, elle brûle ce qui est éclairé et laisse
+  // les ombres sombres, ce qui est le propre d'un éclair.
+  col += col * uBolt * 5.0 + vec3(0.60, 0.72, 1.0) * uBolt * 0.16;
+
   // --- teinte du circuit, très légère, pour que chaque tracé ait sa couleur
   col = mix(col, col * uTint, 0.22);
 
@@ -220,6 +228,7 @@ export function createPost(renderer) {
     uFade: new Uniform(1),
     uCurve: new Uniform(0.62),
     uRain: new Uniform(0),
+    uBolt: new Uniform(0),
     uBeat: new Uniform(0),
     uTint: new Uniform(new Vector3(1, 1, 1)),
   };

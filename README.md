@@ -65,11 +65,11 @@ unités, donc on le voit souvent. Des balises se posent dans l'intervalle libre
 entre le bord et la roche : à trois cent trente unités par seconde et dans le
 noir, la bordure seule ne suffit pas à se placer.
 
-Le cockpit change avec le décor : on n'y pilote plus une voiture qui plane mais
-un vaisseau, verrière plus enveloppante et deux éperons avant qui montent dans
-le champ de vision. Les deux carlingues tiennent chacune en une polyligne — le
-bord intérieur de la verrière — triangulée en éventail depuis un point hors
-cadre, si bien qu'un maximum local du tracé devient un éperon.
+**Il n'y a pas de carlingue dessinée.** Une version précédente peignait une
+verrière en bas de l'image, dans l'esprit des vues cockpit d'époque, et la
+changeait même en vaisseau sur ce circuit-ci. Elle mangeait le tiers inférieur
+de l'écran, c'est-à-dire précisément la portion où arrive la piste sur un
+téléphone debout. On voit mieux sans.
 
 ## Lancer en local
 
@@ -121,20 +121,43 @@ qu'à une interface posée par-dessus.
 
 ## La musique, et le jeu qui bat dessus
 
-Le morceau est lu par un `<audio>` plutôt que décodé en mémoire : quatre
-minutes trente-huit en Float32 coûteraient près de cent mégaoctets sur un
-téléphone. `preservesPitch` est désactivé, donc la hauteur suit la vitesse de
-lecture — l'effet bande magnétique qu'on cherche quand le bolide accélère.
+**Le morceau est décodé en mémoire et joué par Web Audio.** Il a fallu trois
+versions pour en arriver là, parce que la lecture lâchait à l'accélération pour
+trois raisons différentes et cumulées :
 
-**Le morceau ne traverse pas Web Audio, et c'est voulu.** Sur iPhone,
-l'interrupteur latéral coupe la sortie d'un `AudioContext` mais pas celle d'un
-élément média : router la musique dans le graphe — ce que faisait une version
-précédente pour la numériser — la faisait disparaître dès que l'appareil était
-en mode silencieux. S'ajoutent deux pièges : `createMediaElementSource` est à
-sens unique, on ne peut plus rebrancher l'élément sur les haut-parleurs ; et
-changer `playbackRate` sur un élément routé provoque des coupures sur plusieurs
-navigateurs mobiles. Web Audio ne sert donc qu'aux bruitages. Appareil en
-silencieux, on perd les bruitages, pas la musique.
+1. un élément média se nourrit du réseau au débit de l'encodage. Comme la
+   vitesse de lecture suit celle du bolide, accélérer consomme le fichier plus
+   vite qu'il n'arrive. Mesuré, connexion bridée à 144 kb/s, course à plein
+   régime : au fil de l'eau la position n'avance pas d'une seconde en neuf,
+   `readyState` reste à 0. Précharger en `Blob` a réglé celle-là ;
+2. les navigateurs coupent le son d'un élément média dont la vitesse sort
+   grossièrement de [0.5, 4], et le plongeon à l'impact descendait à ×0.41
+   depuis le ralenti. Borner la vitesse a réglé celle-là ;
+3. il restait, sur Safari mobile, que `playbackRate` sur un élément média avec
+   `preservesPitch` désactivé produit un silence à chaque écriture — et on en
+   fait une par image. Celle-là ne se contourne pas, elle se fuit.
+
+`AudioBufferSourceNode.playbackRate` n'a aucun de ces défauts : la hauteur suit
+la vitesse par construction, le changement est échantillon par échantillon, et
+il n'y a plus de réseau du tout une fois le morceau décodé.
+
+**Le prix, et comment on le paie.** Quatre minutes trente-huit en Float32
+coûtent une centaine de mégaoctets, d'où le contexte ouvert à **32 kHz** quand
+l'appareil l'accepte : on perd ce qui est au-dessus de 16 kHz, c'est-à-dire
+rien d'audible sur un morceau électronique, et on tombe à soixante-dix. Et sur
+iPhone, l'interrupteur latéral coupe la sortie d'un `AudioContext` : on le
+neutralise en déclarant `navigator.audioSession.type = 'playback'`, possible
+depuis iOS 16.4. Avant ça, le mode silencieux coupe le jeu — c'est le seul
+recul par rapport à l'élément média, et il est assumé.
+
+**L'écran de démarrage.** On ne donne la main qu'une fois le morceau
+téléchargé *et* décodé, barre de progression à l'appui. Ni le `fetch` ni le
+décodage ne demandent de geste — le contexte audio naît suspendu et se réveille
+au premier appui —, donc tout se fait pendant que l'écran est affiché. Le
+décodage occupe une à trois secondes sans rendre la main : il a son étape
+nommée, sans quoi la barre semblerait figée à 80 %. Si la bande-son est
+introuvable, on entre quand même, en le disant : le jeu reste jouable, le volet
+rythmique se tait.
 
 | Vitesse | Lecture |
 | --- | --- |
@@ -143,34 +166,21 @@ silencieux, on perd les bruitages, pas la musique.
 | survitesse | ×1.38 |
 | turbo | ×1.50 |
 
-**Le morceau est mis en mémoire avant d'être joué**, et ce n'est pas un luxe.
-Lu au fil de l'eau, il se nourrit du réseau au débit de l'encodage ; comme la
-vitesse de lecture suit celle du bolide, accélérer fait consommer le fichier
-plus vite qu'il n'arrive et la lecture s'arrête. Mesuré, connexion bridée à
-144 kb/s, course à plein régime : au fil de l'eau la position n'avance pas
-d'une seconde en neuf, `readyState` reste à 0 ; préchargé, elle avance de 11,6 s
-en 9 s — la lecture devient complètement indépendante du réseau. Le fichier est
-donc récupéré par `fetch`, assemblé en `Blob`, et l'élément ne reçoit sa source
-qu'à ce moment-là — la poser plus tôt le ferait télécharger deux fois. Une barre
-de progression le montre au lancement, et si le `fetch` échoue on retombe sur le
-flux direct en le disant.
-
-La vitesse de lecture est bornée à **[0.55, 2.0]** : les navigateurs coupent le
-son d'un élément média dont la vitesse sort grossièrement de [0.5, 4], et le
-plongeon à l'impact pouvait descendre à ×0.41 depuis le ralenti.
-
 **Le tempo.** Le fichier a été mesuré : **119 BPM pile**, premier temps à
-46 ms, grille vérifiée du début à la fin du morceau. Comme la position de
-lecture d'un `<audio>` est exprimée en temps de média, elle avance plus vite
-quand la bande accélère — la grille de temps suit donc la vitesse du bolide
-sans la moindre analyse temps réel, juste une division (`src/rhythm.js`).
+46 ms, grille vérifiée du début à la fin du morceau. La position de lecture
+n'est plus donnée par le navigateur : le lissage de vitesse est confié à
+`setTargetAtTime`, et la position est intégrée analytiquement sur la même
+exponentielle — `∫ target + (r₀−target)e^{−s/τ} ds`. Avancer d'un simple
+`dt × rate` dériverait de plusieurs dixièmes sur la durée du morceau, et la
+grille rythmique avec. Vérifié en course : dix-huit temps en huit secondes à
+vitesse de lecture moyenne 1,14, soit exactement 119 BPM × 1,14.
 
 De cette horloge découlent : vingt-huit portiques lumineux qui battent la
 mesure le long du circuit, une lumière qui en fait le tour à la noire, un coup
 de corruption sur chaque temps fort, deux filets qui pulsent dans le HUD, et
 une note de la gamme quand on passe sous un portique.
 
-**L'annonceur.** Les voix sont synthétisées, sans aucun fichier son
+**L'annonceur, en anglais.** Les voix sont synthétisées, sans aucun fichier son
 (`src/voice.js`). Le principe est celui des synthétiseurs vocaux d'époque : une
 dent de scie à hauteur fixe — d'où le timbre de robot — traverse trois filtres
 passe-bande réglés sur les **formants**, ces résonances du conduit vocal qui
@@ -180,31 +190,76 @@ sifflantes, on coupe net pour les occlusives, et la parole apparaît. Une
 modulation en anneau ajoute le grain numérique sans rendre le mot
 incompréhensible.
 
-Le vocabulaire tient en onze mots — décompte, tour, dernier tour, turbo,
-bouclier, arrivée, vainqueur — écrits en phonèmes dans `WORDS`. Vérifié sur un
-rendu hors ligne : le /a/ de « partez » culmine à 725 Hz pour 730 attendus, le
-/ø/ de « deux » à 400 et 1575 Hz pour 400 et 1600, et le « un » ressort
-nasalisé, sans aigus.
+La table de formants est celle de l'anglais américain, d'après les mesures de
+Peterson et Barney. Les diphtongues ne sont pas listées : on les écrit comme
+deux voyelles d'affilée et le glissement entre phonèmes les produit tout seul,
+ce qui *est* une diphtongue. Le r américain tient en un troisième formant qui
+s'effondre à 1690 Hz. Vocabulaire : *three, two, one, go, lap, final, turbo,
+shield, boost, finish, winner, warning, systems*. Vérifié sur un rendu hors
+ligne : le /iː/ de « three » sort à 300 et 2080 Hz pour 270 et 2290 attendus, et
+le /oʊ/ de « go » est bien saisi en plein glissement, à 520 et 940 Hz, entre ses
+deux cibles.
 
-**Les graves.** Un réacteur gronde en continu, sa hauteur suivant la vitesse,
+**Les bruitages.** Chaque son est bâti en couches plutôt qu'en une seule forme
+d'onde, parce qu'un oscillateur seul, quelle que soit sa forme, sonne comme un
+oscillateur seul :
+
+| | |
+| --- | --- |
+| **réacteur** | fondamentale sous 50 Hz, deux dents de scie désaccordées de quelques cents dont le battement évite le bourdon figé, turbine en bruit filtré, et un partiel métallique en modulation de fréquence qui ne se réveille qu'au-delà de la mi-régime — c'est lui qui fait entendre l'effort plutôt qu'un ronflement qui monte |
+| **portiques** | trois dents de scie désaccordées dans un passe-bas résonant qui se referme, plus une cloche en modulation de fréquence de rapport 1,41 : un rapport non entier donne des partiels inharmoniques, qu'aucune forme d'onde ne produit |
+| **choc** | descente grave jusqu'à 27 Hz, fracas de tôle en bruit filtré, et trois partiels de rapports 1 / 2,37 / 3,91 aux décroissances inégales qui sonnent la coque |
+| **survitesse** | montée de bruit, gonflement grave, et un chirp en modulation de fréquence qui monte de 300 à 1300 Hz |
+| **turbo** | une aspiration — du bruit qui enfle à l'envers — avant le décrochage de grave et la montée |
+| **tonnerre** | voir plus bas |
+
+**Les graves.** Le réacteur gronde en continu, sa hauteur suivant la vitesse,
 et chaque impact envoie une descente jusqu'à 27 Hz. Comme un haut-parleur de
 téléphone ne restitue pas ces fréquences, le bus des graves passe par une
 saturation douce : elle fabrique les harmoniques, et l'oreille reconstitue la
 fondamentale qu'elle n'entend pas. Un limiteur ferme la marche — sans lui, un
 impact saturé plus le réacteur écrêtaient la moitié des échantillons, mesuré
-sur un rendu hors ligne, et plus rien d'autre ne passait.
+sur un rendu hors ligne, et plus rien d'autre ne passait. Palette entière
+rendue hors ligne : crête 0,803, aucun échantillon écrêté.
 
 **Le plongeon.** À l'impact, la vitesse de lecture tombe d'un coup puis
 remonte avec le lissage : la bande fait un « wow » de magnétophone qu'on
 encaisse en même temps que le mur. On avait d'abord essayé un bégaiement par
-repositionnement de la lecture — mauvaise idée : un serveur qui ne gère pas les
-requêtes par plage, `python -m http.server` par exemple, ne sait pas
-repositionner un média et la lecture repart du début. Jouer sur la vitesse ne
-dépend, lui, de rien.
+repositionnement de la lecture — mauvaise idée du temps de l'élément média, un
+serveur qui ne gère pas les requêtes par plage ne sachant pas repositionner un
+média. Jouer sur la vitesse ne dépend, lui, de rien.
 
 Pour changer de morceau : remplacer `assets/reborn.mp3`, puis ajuster `MUSIC`
 dans `src/config.js` — en particulier `bpm` et `beatOffset`, sans quoi le volet
 rythmique bat à côté.
+
+## L'orage
+
+Sur les circuits sous l'averse, un éclair tombe toutes les cinq à seize
+secondes. Ce n'est pas un flash : c'est une salve de deux à quatre décharges
+très brèves, séparées de quelques dizaines de millisecondes, dont les dernières
+sont plus faibles — c'est ce hachage qui distingue un éclair d'une lampe qu'on
+allume.
+
+La décharge **multiplie** la scène au lieu de s'y ajouter, en linéaire et avant
+la conversion d'affichage. Ajoutée uniformément, elle relevait aussi le noir et
+délavait l'image en une bouillie bleue ; multipliée, elle brûle ce qui est
+éclairé et laisse les ombres sombres, ce qui est le propre d'un éclair. Elle se
+reflète en même temps sur la chaussée mouillée.
+
+Le tonnerre arrive après, retardé de 0,25 à 2,65 seconde selon la distance
+tirée au sort, et il en dépend : loin, c'est une traîne de bruit très filtré sur
+plus de quatre secondes avec un roulement grave dessous ; près, le passe-bas
+s'ouvre, la traîne se raccourcit et un craquement sec se pose en tête. C'est ce
+décalage qui place l'orage dans l'espace plutôt que dans le haut-parleur.
+
+La pluie au sol est un calque additif plaqué sept centièmes d'unité au-dessus
+du revêtement, dans la même extrusion que la piste : il suit donc le dévers et
+les bosses sans aucun calcul. Sa texture est noire presque partout — seules
+ressortent les traînées de reflet, étirées dans le sens de la marche puisque
+c'est ainsi qu'on voit une route mouillée à cette vitesse, et les impacts de
+gouttes. Son opacité scintille en permanence et blanchit d'un coup sous un
+éclair.
 
 ## Ce qu'il y a dedans
 
@@ -219,14 +274,14 @@ src/
   psx.js            matériaux : accrochage des sommets, placage affine, lumière cuite
   track.js          ruban, murs, voûtes, repérage en espace piste
   scenery.js        décors : ville, béton, tube, orbite
-  ship.js           physique du bolide et cockpit
+  ship.js           physique du bolide et caméra
   opponents.js      les cinq adversaires
   rhythm.js         horloge musicale et portiques
   controls.js       gyroscope, manette au doigt, clavier
   hud.js            tableau de bord et sa fonte matricielle 5×7
   post.js           passe finale : tube cathodique, glitch, pluie, tramage
-  audio.js          lecture, vitesse variable, graves, réacteur, bruitages
-  voice.js          annonceur : synthèse par formants, sans fichier son
+  audio.js          décodage, vitesse variable, graves, réacteur, bruitages, orage
+  voice.js          annonceur anglais : synthèse par formants, sans fichier son
   store.js          meilleurs temps et préférences
   ui.js             menus, scores, pause, arrivée
 vendor/three/       Three.js r169 (MIT)
@@ -248,6 +303,7 @@ dans les virages, éviter le joueur quand il arrive à côté.
 | `SHIP.corneringDrift` | config | combien le dévers pousse vers l'extérieur |
 | `RACE.opponents` | config | nombre d'adversaires |
 | `MUSIC.rate*` | config | plage de dérapage de la bande |
+| `MUSIC.sampleRate` | config | taux du contexte — c'est lui qui fixe la mémoire du morceau |
 | `INPUT.tiltSign` | config | sens par défaut, que le menu peut inverser |
 | `MUSIC.bpm` / `beatOffset` | config | calage du volet rythmique |
 | `GLITCH.*` | config | fond, rafales, pic de choc, plafond |
@@ -261,9 +317,10 @@ juger l'image ; `REBORN.setGlitch(null)` rend la main.
 ## Compatibilité
 
 WebGL2 (repli WebGL1), navigateurs mobiles récents. Le son démarre au premier
-appui — et se retente à chaque tape tant que le navigateur refuse. L'écran
-**Contrôles** affiche en clair l'état de la lecture — source, `readyState`,
-position, secondes en mémoire, vitesse de lecture, interruptions —, de quoi
+appui — et se retente à chaque tape tant que le navigateur refuse. iOS 16.4 ou
+plus récent pour que le mode silencieux ne coupe pas le jeu. L'écran
+**Contrôles** affiche en clair l'état de la lecture — décodé ou non, secondes
+en mémoire, position, vitesse, état et taux du contexte audio —, de quoi
 diagnostiquer un appareil qu'on n'a pas sous la main. Les capteurs
 sont demandés au lancement d'une course, après le son : l'inverse ferait perdre
 le contexte de geste et le son serait bloqué. Si la moyenne descend sous 40

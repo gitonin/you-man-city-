@@ -79,6 +79,14 @@ export const INPUT = {
  */
 export const MUSIC = {
   src: './assets/reborn.mp3',
+  /**
+   * Taux d'échantillonnage du contexte audio. Le morceau y est décodé, donc
+   * c'est lui qui fixe la mémoire occupée : 32 kHz coûte environ soixante-dix
+   * mégaoctets là où le 48 kHz natif en coûterait cent cinq, et ne retire que
+   * ce qui est au-dessus de 16 kHz. Un appareil qui refuse ce taux retombe sur
+   * le sien.
+   */
+  sampleRate: 32000,
   bpm: 119,
   /** Position du premier temps, en secondes. */
   beatOffset: 0.0464,
@@ -88,12 +96,13 @@ export const MUSIC = {
   rateBoost: 1.38,
   rateTurbo: 1.5,
   /**
-   * Bornes de la vitesse de lecture. Les navigateurs coupent le son d'un
-   * élément média dont la vitesse sort grossièrement de [0.5, 4] : on reste
-   * franchement à l'intérieur, plongeon à l'impact compris.
+   * Bornes de la vitesse de lecture. Depuis que le morceau passe par Web
+   * Audio, la fenêtre de coupure des éléments média ne s'applique plus ; ces
+   * bornes ne sont donc là que pour la musique elle-même, pour qu'un plongeon
+   * à l'impact ne descende pas jusqu'à la bouillie.
    */
-  rateFloor: 0.55,
-  rateCeiling: 2.0,
+  rateFloor: 0.5,
+  rateCeiling: 1.9,
   /** Lissage du changement de vitesse, en secondes. */
   smoothing: 0.35,
   volume: 0.82,

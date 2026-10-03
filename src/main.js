@@ -140,7 +140,6 @@ function resize() {
 
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
-  ship.buildCockpit(aspect, RENDER.fov);
 
   // On ne réclame une rotation que si l'appareil contredit le format choisi,
   // et seulement sur un écran assez petit pour que ça gêne : sur un ordinateur
@@ -189,6 +188,49 @@ const glitch = { hit: 0, burst: 0, burstTime: 0, nextRoll: 0 };
 
 const clock = new Clock();
 let hudTick = 0;
+
+/**
+ * L'orage, sur les circuits sous l'averse.
+ *
+ * Un éclair n'est pas un flash : c'est une salve de deux à quatre décharges
+ * très brèves, séparées de quelques dizaines de millisecondes, dont les
+ * dernières sont plus faibles. Et le tonnerre arrive après, d'autant plus tard
+ * et plus sourd que l'éclair est loin — c'est ce décalage qui place l'orage
+ * dans l'espace plutôt que dans le haut-parleur.
+ */
+const storm = { next: 4, bolt: 0, strikes: [], distance: 0.5, hold: null };
+
+function updateStorm(dt, t) {
+  const active = phase !== 'menu' && world && world.theme.rain > 0;
+  if (!active) {
+    storm.bolt = Math.max(0, storm.bolt - dt * 9);
+    return;
+  }
+
+  storm.next -= dt;
+  if (storm.next <= 0) {
+    storm.next = 5 + Math.random() * 11;
+    storm.distance = Math.random();
+    // proche = fort et blanc ; lointain = une lueur à l'horizon
+    const power = 0.07 + (1 - storm.distance) * 0.42;
+    const count = 2 + ((Math.random() * 3) | 0);
+    storm.strikes.length = 0;
+    let at = t;
+    for (let i = 0; i < count; i++) {
+      storm.strikes.push({ at, power: power * (i === 0 ? 1 : 0.35 + Math.random() * 0.5) });
+      at += 0.04 + Math.random() * 0.11;
+    }
+    // trois cents mètres par seconde, à l'échelle du jeu
+    audio.thunder(storm.distance, 0.25 + storm.distance * 2.4);
+  }
+
+  storm.bolt = Math.max(0, storm.bolt - dt * 11);
+  while (storm.strikes.length && storm.strikes[0].at <= t) {
+    storm.bolt = Math.max(storm.bolt, storm.strikes.shift().power);
+  }
+  // maintien de réglage : fige la décharge le temps de juger l'image
+  if (storm.hold !== null) storm.bolt = storm.hold;
+}
 
 function applySettings() {
   controls.settings.tiltSign = store.settings.invert ? -INPUT.tiltSign : INPUT.tiltSign;
@@ -282,7 +324,7 @@ function finishRace() {
   const records = store.record(world.theme.id, {
     total: s.totalTime, lap: s.bestLap, rank,
   });
-  audio.say(rank === 1 ? 'vainqueur' : 'arrivee', { level: 1.05, when: 0.2 });
+  audio.say(rank === 1 ? 'winner' : 'finish', { level: 1.05, when: 0.2 });
   ui.showResults(result, records);
 }
 
@@ -381,13 +423,13 @@ function frame() {
     const n = Math.ceil(countdown);
     if (n !== lastBeep && n > 0) {
       audio.tick(false);
-      audio.say(['', 'un', 'deux', 'trois'][Math.min(n, 3)]);
+      audio.say(['', 'one', 'two', 'three'][Math.min(n, 3)]);
       lastBeep = n;
     }
     if (countdown <= 0) {
       phase = 'racing';
       audio.tick(true);
-      audio.say('partez', { level: 1.1 });
+      audio.say('go', { level: 1.1 });
     } else {
       center = String(Math.max(1, n));
       sub = 'GLISSER VERS LE HAUT POUR ACCELERER';
@@ -435,15 +477,16 @@ function frame() {
   if (ship.state.lapThisFrame && !ship.state.finished) {
     audio.tick(true);
     if (ship.state.lap === RACE.laps - 1) {
-      audio.say('dernier', { when: 0.12 });
-      audio.say('tour', { when: 0.56 });
+      audio.say('final', { when: 0.12 });
+      audio.say('lap', { when: 0.56 });
     } else {
-      audio.say('tour', { when: 0.12 });
+      audio.say('lap', { when: 0.12 });
     }
   }
   if (phase === 'racing' && !shieldWarned && ship.state.shield < 32) {
     shieldWarned = true;
-    audio.say('bouclier', { level: 0.95, ring: 0.5 });
+    audio.say('warning', { level: 0.95, ring: 0.5 });
+    audio.say('shield', { level: 0.95, ring: 0.5, when: 0.5 });
   }
   if (ship.state.finished && phase === 'racing') finishRace();
 
@@ -481,6 +524,10 @@ function frame() {
   u.uBeat.value = beatPulse;
   u.uCurve.value = 0.62 + beatPulse * 0.12;
 
+  updateStorm(dt, t);
+  u.uBolt.value = storm.bolt;
+  if (world && world.scenery.setStorm) world.scenery.setStorm(storm.bolt);
+
   // le champ de vision s'ouvre avec la vitesse : c'est ce qui donne la sensation
   const targetFov = RENDER.fov + speedNorm * 11
     + (ship.state.boost > 0 ? 4 : 0) + (ship.state.turbo > 0 ? 9 : 0);
@@ -489,19 +536,14 @@ function frame() {
     camera.updateProjectionMatrix();
   }
 
-  // si la lecture s'étrangle malgré tout, on le dit plutôt que de laisser
-  // l'utilisateur croire à un bug
-  ui.setSoundStarving(audio.starving && !audio.buffered);
-
   // le diagnostic ne sert que là où on le lit
   if (ui.current === 'controls' && hudTick % 20 === 0) {
-    const el = audio.element;
-    const end = el.buffered.length ? el.buffered.end(el.buffered.length - 1) : 0;
+    const c = audio.context;
     ui.setDiagnostic([
       `lecture   ${audio.playing ? 'oui' : 'non'}${audio.muted ? ' (coupé)' : ''}`,
-      `préchargé ${audio.buffered ? 'oui' : 'non'} · tampon ${end.toFixed(0)} s / ${(el.duration || 0).toFixed(0)} s`,
-      `vitesse   x${el.playbackRate.toFixed(2)} · position ${el.currentTime.toFixed(0)} s`,
-      `état      readyState ${el.readyState}${el.error ? ` · erreur ${el.error.code}` : ''}`,
+      `décodé    ${audio.buffered ? 'oui' : 'non'} · ${audio.duration.toFixed(0)} s en mémoire`,
+      `vitesse   x${audio.rate.toFixed(2)} · position ${audio.mediaTime().toFixed(0)} s`,
+      `contexte  ${c ? `${c.state} · ${(c.sampleRate / 1000).toFixed(1)} kHz` : 'absent'}`,
     ].join('\n'));
   }
 
@@ -511,19 +553,27 @@ function frame() {
 
 // ------------------------------------------------------------------- départ
 
-// Le morceau part en mémoire tout de suite : aucun geste n'est requis pour un
-// `fetch`, et c'est la seule façon que la lecture ne dépende plus du réseau
-// une fois qu'on accélère.
-audio.load((ratio) => ui.setMusicProgress(ratio)).then((ok) => {
-  ui.setMusicProgress(ok ? 1 : -1);
-});
-
 loadTrack(THEMES[0].id);
 resize();
 applySettings();
-ui.show('title');
+ui.show('boot');
 hud.draw(hudState('', ''));
 frame();
+
+/**
+ * On ne donne la main qu'une fois le morceau téléchargé **et décodé**.
+ *
+ * Aucun geste n'est requis pour un `fetch` ni pour un décodage — le contexte
+ * audio naît suspendu et se réveille au premier appui —, donc tout peut se
+ * faire pendant que l'écran de démarrage est affiché. Et comme la vitesse de
+ * lecture suit celle du bolide, c'est la seule façon qu'accélérer ne demande
+ * jamais rien au réseau.
+ */
+audio.load((ratio, stage) => ui.setLoad(ratio, stage)).then((ok) => {
+  // Sans bande-son le jeu reste jouable : le volet rythmique se tait, le reste
+  // tourne. On laisse donc entrer, en l'ayant dit.
+  setTimeout(() => ui.show('title'), ok ? 220 : 1600);
+});
 
 // Fenêtre de réglage : pratique pour ajuster sans recharger.
 window.REBORN = {
@@ -533,5 +583,9 @@ window.REBORN = {
   get world() { return world; },
   get phase() { return phase; },
   setGlitch(v) { glitchOverride = v; },
+  /** Déclenche un éclair tout de suite : pour régler l'orage. */
+  strike() { storm.next = 0; },
+  stormState() { return { bolt: storm.bolt, next: storm.next, distance: storm.distance }; },
+  holdBolt(v) { storm.hold = v; },
   startRace,
 };

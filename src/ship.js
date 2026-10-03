@@ -1,24 +1,20 @@
-import {
-  BufferAttribute,
-  BufferGeometry,
-  DoubleSide,
-  Group,
-  Mesh,
-  Quaternion,
-  Vector3,
-} from 'three';
+import { Quaternion, Vector3 } from 'three';
 
 import { RACE, SHIP } from './config.js';
-import { psxMaterial } from './psx.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /**
- * Le bolide, et la caméra qui est dans son cockpit.
+ * Le bolide, et la caméra qu'il porte.
  *
  * Tout l'état tient en deux scalaires : `s`, la distance parcourue sur le
  * ruban, et `x`, l'écart par rapport à l'axe. Le monde n'intervient que pour
  * convertir ce couple en position et en orientation.
+ *
+ * Il n'y a **pas** de carlingue dessinée. Une version précédente peignait une
+ * verrière en bas de l'image, dans l'esprit des vues cockpit d'époque : elle
+ * mangeait le tiers inférieur de l'écran, c'est-à-dire précisément la portion
+ * où arrive la piste sur un téléphone debout. On voit mieux sans.
  */
 const makeFrame = () => ({
   position: new Vector3(),
@@ -29,44 +25,6 @@ const makeFrame = () => ({
   covered: false,
 });
 
-/**
- * Les deux carlingues.
- *
- * Une silhouette tient en une seule polyligne : le bord intérieur de la
- * verrière, de gauche à droite, en fractions de la demi-largeur et de la
- * demi-hauteur de l'image. Tout ce qui est en dessous est de la coque, et se
- * triangule en éventail depuis un point situé hors cadre par le bas — ce qui
- * marche tant que les abscisses ne reculent pas. Un maximum local dans la
- * polyligne devient donc un éperon qui monte dans le champ de vision.
- *
- * `edgeY` est la hauteur à laquelle le montant touche le bord de l'écran :
- * bas pour l'antigravité, qui est une voiture ouverte sur la route ; haut
- * pour le vaisseau, dont la verrière enveloppe.
- *
- * L'ombrage est cuit de la même façon : noir franc au ras de l'écran, et
- * remontée en puissance vers l'arête. Le dégradé doit être marqué, sinon la
- * carlingue sort exactement à la luminosité de la chaussée et disparaît —
- * c'est ce qui arrivait avec une rampe linéaire trop plate.
- */
-const HULLS = {
-  antigrav: {
-    edgeY: -0.22,
-    inner: [[-0.55, -0.62], [-0.11, -0.80], [0.11, -0.80], [0.55, -0.62]],
-    shade: { base: 0.004, gain: 0.072, rgb: [0.78, 0.95, 1.3] },
-    rim: 0x14525e,
-  },
-  /** Deux éperons avant encadrent une arête dorsale : on pilote un dard. */
-  starship: {
-    edgeY: -0.10,
-    inner: [
-      [-0.86, -0.34], [-0.62, -0.56], [-0.54, -0.30], [-0.44, -0.60],
-      [-0.15, -0.76], [0.0, -0.64], [0.15, -0.76],
-      [0.44, -0.60], [0.54, -0.30], [0.62, -0.56], [0.86, -0.34],
-    ],
-    shade: { base: 0.005, gain: 0.088, rgb: [0.84, 0.93, 1.24] },
-    rim: 0x2a5ca4,
-  },
-};
 
 export function createShip(camera) {
   /** Le circuit change d'une course à l'autre ; le bolide, non. */
@@ -97,107 +55,6 @@ export function createShip(camera) {
     lapThisFrame: false,
   };
 
-
-  // ------------------------------------------------------------------ cockpit
-  const cockpit = new Group();
-  camera.add(cockpit);
-
-  let cockpitMesh = null;
-  let rimMesh = null;
-  let hull = HULLS.antigrav;
-  /** Dernières dimensions reçues : changer de carlingue reconstruit à l'identique. */
-  let lastAspect = 1;
-  let lastFov = 68;
-  // Double face : la carlingue est triangulée en éventail depuis un point
-  // hors cadre, ce qui donne un enroulement horaire. Sans ça elle est culée et
-  // il ne reste que le liseré, à flotter sur la route.
-  const cockpitMat = psxMaterial({
-    color: 0xffffff, vertexColors: true, affine: false, fog: false, side: DoubleSide,
-  });
-  const rimMat = psxMaterial({
-    color: hull.rim,
-    vertexColors: false,
-    affine: false,
-    fog: false,
-    toneMapped: false,
-    side: DoubleSide,
-  });
-
-  /**
-   * Le cockpit est dessiné en proportion du champ de vision : quel que soit
-   * l'écran, il mord toujours autant sur les bords.
-   */
-  function buildCockpit(aspect = lastAspect, fovDeg = lastFov) {
-    lastAspect = aspect;
-    lastFov = fovDeg;
-    const d = 2.0;
-    const hh = Math.tan((fovDeg * Math.PI) / 360) * d;
-    const hw = hh * aspect;
-
-    // le bord intérieur, bouclé par deux points hors cadre pour que
-    // l'éventail couvre aussi les coins bas
-    const outline = [
-      [-1.5, -1.5], [-1.5, hull.edgeY],
-      ...hull.inner,
-      [1.5, hull.edgeY], [1.5, -1.5],
-    ];
-    const apex = [0, -1.5];
-    const { base, gain, rgb } = hull.shade;
-
-    const verts = [];
-    const shades = [];
-    const pushTri = (a, b, c) => {
-      for (const pt of [a, b, c]) {
-        verts.push(pt[0] * hw, pt[1] * hh, -d);
-        const t = Math.max(0, (pt[1] + 1.15) / 1.15);
-        const k = base + gain * Math.pow(Math.min(1, t), 1.6);
-        shades.push(k * rgb[0], k * rgb[1], k * rgb[2]);
-      }
-    };
-
-    for (let i = 0; i < outline.length - 1; i++) {
-      pushTri(apex, outline[i], outline[i + 1]);
-    }
-
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(new Float32Array(verts), 3));
-    geo.setAttribute('color', new BufferAttribute(new Float32Array(shades), 3));
-
-    if (cockpitMesh) {
-      cockpit.remove(cockpitMesh);
-      cockpitMesh.geometry.dispose();
-    }
-    cockpitMesh = new Mesh(geo, cockpitMat);
-    cockpitMesh.frustumCulled = false;
-    cockpit.add(cockpitMesh);
-
-    // liseré lumineux sur l'arête intérieure, hors points de bouclage
-    const rim = [];
-    const edge = outline.slice(1, -1);
-    const w = 0.018;
-    for (let i = 0; i < edge.length - 1; i++) {
-      const a = edge[i];
-      const b = edge[i + 1];
-      const dx = b[0] - a[0];
-      const dy = b[1] - a[1];
-      const len = Math.hypot(dx, dy) || 1;
-      const ox = (-dy / len) * w;
-      const oy = (dx / len) * w;
-      for (const pt of [
-        [a[0], a[1]], [b[0], b[1]], [b[0] + ox, b[1] + oy],
-        [a[0], a[1]], [b[0] + ox, b[1] + oy], [a[0] + ox, a[1] + oy],
-      ]) rim.push(pt[0] * hw, pt[1] * hh, -d + 0.004);
-    }
-    const rimGeo = new BufferGeometry();
-    rimGeo.setAttribute('position', new BufferAttribute(new Float32Array(rim), 3));
-    if (rimMesh) {
-      cockpit.remove(rimMesh);
-      rimMesh.geometry.dispose();
-    }
-    rimMesh = new Mesh(rimGeo, rimMat);
-    rimMesh.frustumCulled = false;
-    cockpit.add(rimMesh);
-  }
 
   // ------------------------------------------------------------------ physique
   const up = new Vector3();
@@ -333,26 +190,11 @@ export function createShip(camera) {
 
   return {
     state,
-    cockpit,
-    /**
-     * Branche le bolide sur un nouveau circuit. En orbite, on ne pilote plus
-     * une voiture qui plane mais un vaisseau : la carlingue change avec le
-     * décor.
-     */
-    attach(next) {
-      track = next;
-      const wanted = next.theme.scenery === 'space' ? HULLS.starship : HULLS.antigrav;
-      if (wanted !== hull) {
-        hull = wanted;
-        rimMat.color.setHex(hull.rim);
-        buildCockpit();
-      }
-      reset();
-    },
+    /** Branche le bolide sur un nouveau circuit. */
+    attach(next) { track = next; reset(); },
     reset,
     update,
     knock,
-    buildCockpit,
     get normalizedSpeed() { return state.speed / SHIP.maxSpeed; },
     /** Distance totale parcourue : sert au classement. */
     get travelled() { return state.s; },
