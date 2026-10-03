@@ -107,8 +107,9 @@ function loadTrack(themeId) {
   const theme = themeById(themeId);
   const track = buildTrack(scene, theme);
   const scenery = buildScenery(scene, track, theme);
-  const opponents = createOpponents(scene, track, theme);
+  // l'ordre compte : les adversaires visent les ouvertures des barrages
   const obstacles = createObstacles(scene, track, theme);
+  const opponents = createOpponents(scene, track, theme, obstacles);
   const rhythm = createRhythm(scene, track, audio, theme);
 
   scene.fog.color.set(theme.fog.color);
@@ -241,6 +242,8 @@ function updateStorm(dt, t) {
 function applySettings() {
   controls.settings.tiltSign = store.settings.invert ? -INPUT.tiltSign : INPUT.tiltSign;
   controls.settings.tiltRange = ui.sensitivityRange;
+  // la sensibilité joue sur les deux axes : une main vive l'est dans les deux
+  controls.settings.pitchRange = INPUT.pitchRange * (ui.sensitivityRange / INPUT.tiltRange);
   if (store.settings.sound === audio.muted) audio.toggleMute();
   // changer de format redimensionne le cadre : cible de rendu, HUD, cockpit
   // et grille d'accrochage se recalculent tous là-dedans
@@ -473,7 +476,7 @@ function frame() {
       glitch.hit = Math.max(glitch.hit, GLITCH.hitBurst);
     } else {
       center = String(Math.max(1, n));
-      sub = world.theme.hint || 'GLISSER VERS LE HAUT POUR ACCELERER';
+      sub = world.theme.hint || 'PENCHER VERS L AVANT POUR ACCELERER';
     }
   }
   // le « GO » survit au changement de phase, le temps de se recoller
@@ -505,7 +508,8 @@ function frame() {
     ship.state.rank = world.opponents.rankOf(ship.state.s);
     if (phase === 'racing' && world.obstacles.update(prevS, ship.state.s, ship.state.x)) {
       // on recule du côté le plus dégagé, et ça coûte cher : c'est l'épreuve
-      ship.knock(-Math.sign(ship.state.x) || 1, 0.62, 18);
+      // on rebondit vers le plus dégagé, et ça coûte le prix d'un mur et demi
+      ship.knock(-Math.sign(ship.state.x) || 1, 0.62, world.theme.bonus ? 18 : 12);
       audio.hit(1.1);
       audio.dip(1);
     }

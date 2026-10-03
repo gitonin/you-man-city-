@@ -30,11 +30,12 @@ export const TRACK = {
    * portiques, plaques, trajectoires adverses, muraille de rochers —, donc
    * cette seule valeur élargit les quatre circuits d'un coup. En contrepartie
    * d'une piste plus large, la direction gagne en autorité (`SHIP.steerForce`)
-   * pour qu'un bord à l'autre coûte le même temps qu'avant.
+   * pour qu'un bord à l'autre coûte le même temps qu'avant. C'est aussi elle
+   * qui donne la place d'esquiver les barrages sans jouer au millimètre.
    */
-  halfWidth: 17.5,
+  halfWidth: 24,
   /** Suit la largeur : des murs restés bas donneraient une piste de plaine. */
-  wallHeight: 9,
+  wallHeight: 11,
   samples: 900,
   tileLength: 26,
   bankStrength: 46,
@@ -228,12 +229,12 @@ export function buildTrack(scene, theme) {
   const HW = TRACK.halfWidth;
   const WH = TRACK.wallHeight;
 
-  // Piste : trois quads en travers. Un seul laissait voir le placage affine
+  // Piste : quatre quads en travers. Un seul laissait voir le placage affine
   // de la plus belle façon, mais depuis que la chaussée fait trente-cinq
   // unités de large et qu'aucune carlingue ne masque le bas de l'image, le
   // bord le plus proche est vu si rasant qu'un unique texel s'étalait sur un
-  // tiers de l'écran. Trois quads gardent la torsion et suppriment la bavure.
-  const lanes = 3;
+  // tiers de l'écran. Quatre quads gardent la torsion et suppriment la bavure.
+  const lanes = 4;
   const roadProfile = [];
   for (let i = 0; i <= lanes; i++) {
     roadProfile.push({ lat: -HW + (2 * HW * i) / lanes, up: 0, u: i / lanes });

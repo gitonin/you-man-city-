@@ -3,20 +3,28 @@ import { INPUT } from './config.js';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /**
- * Les commandes.
+ * Les commandes : **l'appareil tout entier est la manette.**
  *
- * Direction : l'inclinaison de l'appareil. Accélération : une manette au
- * doigt — on glisse vers le haut pour mettre les gaz, vers le bas pour lever
- * le pied, et la valeur reste où on l'a laissée. Double appui : turbo.
+ * Deux axes, pris sur le même capteur. Le roulis dirige — on penche à gauche,
+ * on va à gauche. Le tangage fait les gaz : penché vers l'avant, on accélère ;
+ * ramené vers soi, on lève le pied.
  *
- * Clavier et glissement horizontal n'existent que pour pouvoir essayer sans
- * gyroscope ; ils ne sont pas le mode nominal.
+ * L'angle auquel on tient l'appareil au moment du calage devient le neutre, et
+ * le neutre vaut **mi-régime** : un neutre à zéro obligerait à tenir le
+ * téléphone penché en permanence rien que pour avancer. Le bouton
+ * « Recentrer » reprend ce calage sur les deux axes à la fois.
+ *
+ * Doigt et clavier ne subsistent que pour pouvoir essayer sans gyroscope ; ce
+ * n'est pas le mode nominal. Le double appui, lui, reste le turbo partout : ce
+ * n'est pas une commande de gaz mais une détente.
  */
 export function createControls(surface) {
   const settings = {
     /** Multiplie le sens de l'inclinaison : l'utilisateur peut l'inverser. */
     tiltSign: INPUT.tiltSign,
     tiltRange: INPUT.tiltRange,
+    pitchSign: INPUT.pitchSign,
+    pitchRange: INPUT.pitchRange,
   };
 
   const state = {
@@ -27,10 +35,13 @@ export function createControls(surface) {
     gyroAvailable: false,
     gyroEnabled: false,
     calibration: null,
+    pitchCalibration: null,
     rawTilt: 0,
+    rawPitch: 0,
   };
 
   let lastTilt = null;
+  let lastPitch = null;
 
   /**
    * Le roulis tel que le ressent la main, quelle que soit la façon de tenir.
@@ -43,11 +54,31 @@ export function createControls(surface) {
    * Un éventuel inversement global reste rattrapable par le réglage « Sens de
    * l'inclinaison », qui multiplie le résultat.
    */
-  function rollOf(e) {
+  function screenAngle() {
     const deg = (screen.orientation && screen.orientation.angle)
       ?? window.orientation ?? 0;
-    const a = (deg * Math.PI) / 180;
+    return (deg * Math.PI) / 180;
+  }
+
+  function rollOf(e) {
+    const a = screenAngle();
     return e.gamma * Math.cos(a) + (e.beta || 0) * Math.sin(a);
+  }
+
+  /**
+   * Le tangage ressenti : l'axe orthogonal au roulis, projeté de la même
+   * façon sur le repère de l'écran. Debout c'est `beta`, couché c'est `gamma`
+   * au signe près — exactement la rotation de 90° de l'autre formule.
+   */
+  function pitchOf(e) {
+    const a = screenAngle();
+    return (e.beta || 0) * Math.cos(a) - e.gamma * Math.sin(a);
+  }
+
+  /** Écarte la zone morte sans créer de saut à sa sortie. */
+  function deaden(v, dead) {
+    if (Math.abs(v) < dead) return 0;
+    return Math.sign(v) * (Math.abs(v) - dead);
   }
 
   // ------------------------------------------------------------- gyroscope
@@ -55,19 +86,34 @@ export function createControls(surface) {
     if (e.gamma == null) return;
     state.gyroAvailable = true;
     const roll = rollOf(e);
+    const pitch = pitchOf(e);
     lastTilt = roll;
+    lastPitch = pitch;
     if (!state.gyroEnabled) return;
 
     if (state.calibration === null) state.calibration = roll;
-    let tilt = roll - state.calibration;
+    if (state.pitchCalibration === null) state.pitchCalibration = pitch;
+
     // l'appareil peut sauter d'un repère à l'autre en passant la verticale
-    if (tilt > 180) tilt -= 360;
-    if (tilt < -180) tilt += 360;
+    const wrap = (d) => (d > 180 ? d - 360 : d < -180 ? d + 360 : d);
+    const tilt = wrap(roll - state.calibration);
+    const lean = wrap(pitch - state.pitchCalibration);
 
     state.rawTilt = tilt;
+    state.rawPitch = lean;
+
     const dead = INPUT.tiltDeadzone;
-    const live = Math.abs(tilt) < dead ? 0 : Math.sign(tilt) * (Math.abs(tilt) - dead);
-    state.steer = clamp(live / (settings.tiltRange - dead), -1, 1) * settings.tiltSign;
+    state.steer = clamp(deaden(tilt, dead) / (settings.tiltRange - dead), -1, 1)
+      * settings.tiltSign;
+
+    // Penché vers l'avant, le tangage *diminue* : l'appareil se couche. D'où
+    // le signe négatif, qui met les gaz quand on pousse le téléphone devant
+    // soi comme on pousse une manette.
+    const pDead = INPUT.pitchDeadzone;
+    const lever = clamp(
+      deaden(-lean, pDead) / (settings.pitchRange - pDead), -1, 1
+    ) * settings.pitchSign;
+    state.throttle = clamp(INPUT.pitchNeutral + lever * Math.max(INPUT.pitchNeutral, 1 - INPUT.pitchNeutral), 0, 1);
     state.source = 'gyro';
   }
 
@@ -86,10 +132,14 @@ export function createControls(surface) {
     }
     state.gyroEnabled = true;
     state.calibration = lastTilt;
+    state.pitchCalibration = lastPitch;
     return true;
   }
 
-  const recalibrate = () => { state.calibration = lastTilt; };
+  const recalibrate = () => {
+    state.calibration = lastTilt;
+    state.pitchCalibration = lastPitch;
+  };
 
   // ------------------------------------------------------------------ doigt
   /** @type {Map<number, {x:number, y:number, throttle:number, steering:boolean}>} */
@@ -142,7 +192,10 @@ export function createControls(surface) {
       state.source = 'touch';
       return;
     }
-    // manette : vers le haut on accélère
+    // Repli sans gyroscope : la manette au doigt, vers le haut on accélère.
+    // Avec le gyroscope, le tangage tient les gaz et le doigt n'a rien à y
+    // faire — il les reprendrait pour une image avant d'être écrasé.
+    if (state.gyroEnabled) return;
     const travel = long * INPUT.throttleTravel;
     state.throttle = clamp(t.throttle + (t.y - e.clientY) / travel, 0, 1);
   }
@@ -195,6 +248,7 @@ export function createControls(surface) {
 
   /** Appelé une fois par image : entretient les commandes continues. */
   function tick(dt) {
+    if (state.gyroEnabled) return;
     const up = keys.has('arrowup') || keys.has('w') || keys.has('z') || keys.has(' ');
     const down = keys.has('arrowdown') || keys.has('s');
     if (up) state.throttle = clamp(state.throttle + dt * 1.8, 0, 1);

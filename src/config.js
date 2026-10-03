@@ -34,7 +34,7 @@ export const SHIP = {
    * la chaussée prenne une seconde environ : si on élargit `TRACK.halfWidth`,
    * il faut la suivre, sinon le vaisseau devient pataud.
    */
-  steerForce: 118,
+  steerForce: 150,
   /** Poussée vers l'extérieur du virage : le dévers se paie. */
   corneringDrift: 0.26,
   steerDamp: 3.1,
@@ -60,6 +60,18 @@ export const INPUT = {
   /** Inclinaison max de l'appareil prise en compte, en degrés. */
   tiltRange: 26,
   tiltDeadzone: 1.8,
+  /**
+   * Tangage : l'appareil penché vers l'avant met les gaz, ramené vers soi il
+   * lève le pied. L'angle de maintien devient le point neutre, et c'est
+   * **mi-régime** — un neutre à zéro obligerait à tenir le téléphone penché en
+   * permanence pour avancer. La plage est comptée de part et d'autre, donc
+   * vingt degrés vers l'avant suffisent à passer de la mi-course au plein gaz.
+   */
+  pitchRange: 20,
+  pitchDeadzone: 2,
+  pitchNeutral: 0.5,
+  /** Sens du tangage, que le réglage « Contrôles » peut inverser avec le reste. */
+  pitchSign: 1,
   /**
    * Sens du gyroscope. Le réglage « Contrôles » le multiplie par -1, donc
    * cette valeur n'est que le défaut : l'utilisateur garde le dernier mot.

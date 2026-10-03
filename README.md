@@ -10,16 +10,30 @@ sur son tempo.
 
 ## Jouer
 
+**L'appareil tout entier est la manette.**
+
 | | |
 | --- | --- |
-| **Incliner l'appareil** | tourner à gauche / à droite |
-| **Glisser vers le haut** | mettre les gaz |
-| **Glisser vers le bas** | lever le pied |
+| **Pencher à gauche / à droite** | diriger |
+| **Pencher vers l'avant** | mettre les gaz |
+| **Ramener vers soi** | lever le pied |
 | **Double appui** | turbo |
 
-La manette est un levier : elle reste où on la laisse, on ne garde pas le doigt
-appuyé. Trois tours, cinq adversaires, les chevrons orange donnent une
-survitesse, les murs et les accrochages coûtent du bouclier.
+L'angle auquel on tient l'appareil au moment du calage devient le neutre, et le
+neutre vaut **mi-régime** : un neutre à zéro obligerait à tenir le téléphone
+penché en permanence rien que pour avancer. Vingt degrés vers l'avant suffisent
+alors à passer de la mi-course au plein gaz, vingt degrés en arrière à couper.
+Le bouton « Recentrer » reprend le calage sur les deux axes à la fois.
+
+Les deux axes viennent du même capteur et de la même projection : le roulis est
+`gamma·cos a + beta·sin a`, le tangage `beta·cos a − gamma·sin a`, où `a` est
+l'angle d'écran déclaré par le système. Debout, c'est donc `gamma` qui dirige
+et `beta` qui fait les gaz ; couché, les rôles s'échangent au signe près — la
+même formule tournée de 90°.
+
+Trois tours, cinq adversaires, les chevrons orange donnent une survitesse, les
+murs et les accrochages coûtent du bouclier. **Chaque circuit a ses barrages**
+à esquiver, et chacun a un passage.
 
 Le son et les capteurs sont réclamés **au tout premier appui**, celui qui amène
 sur le titre. L'ordre n'est pas libre : le son d'abord et sans attendre, les
@@ -28,8 +42,10 @@ toute attente avant `play()` ferait sortir du contexte de geste, auquel cas le
 son serait refusé. Refusés, les capteurs sont redemandés à la tape suivante.
 
 Sans gyroscope (ordinateur, ou capteurs refusés) : la moitié gauche de l'écran
-dirige, la moitié droite fait manette ; au clavier, flèches gauche/droite pour
-diriger, haut/bas ou espace pour les gaz, majuscule pour le turbo. Le sens de
+dirige, la moitié droite fait manette au doigt ; au clavier, flèches
+gauche/droite pour diriger, haut/bas ou espace pour les gaz, majuscule pour le
+turbo. Doigt et clavier se taisent dès que le gyroscope répond, sinon ils
+reprendraient les gaz le temps d'une image avant d'être écrasés. Le sens de
 l'inclinaison, la sensibilité, le **format de l'écran** et le son se règlent
 dans **Contrôles**.
 
@@ -102,9 +118,9 @@ tordent sur les grands polygones. Le GPU, lui, interpole *avec* correction. On
 la défait en transportant `uv * w` et `w` dans deux varyings, puis en divisant
 l'un par l'autre dans le fragment — ce qui redonne exactement une interpolation
 linéaire à l'écran. Plus le polygone est grand, plus la torsion se voit, d'où
-une piste volontairement grossière : **trois quads en travers**. Elle n'en a eu
+une piste volontairement grossière : **quatre quads en travers**. Elle n'en a eu
 qu'un pendant longtemps, ce qui était encore mieux — jusqu'à ce que la chaussée
-passe à trente-cinq unités de large et que la carlingue disparaisse du bas de
+passe à quarante-huit unités de large et que la carlingue disparaisse du bas de
 l'image. Le bord le plus proche était alors vu si rasant qu'un unique texel
 s'étalait sur un tiers de l'écran. Pour la même raison, l'œil est monté de 2,9
 à 4,4 unités au-dessus du revêtement.
@@ -266,6 +282,35 @@ Pour changer de morceau : remplacer `assets/reborn.mp3`, puis ajuster `MUSIC`
 dans `src/config.js` — en particulier `bpm` et `beatOffset`, sans quoi le volet
 rythmique bat à côté.
 
+## Les barrages
+
+Un barrage est un rideau en travers de la piste, percé d'une ouverture dont la
+position est tirée au sort. C'est **l'ouverture qui est placée en premier** et
+les blocs qui en découlent, jamais l'inverse : poser des blocs au hasard
+produirait tôt ou tard un mur sans passage, et une piste où l'on ne peut que
+mourir n'est pas une piste. L'ouverture fait vingt-six unités de large pour une
+chaussée de quarante-huit, et le vaisseau en fait moins de cinq : il y a de la
+place.
+
+Les blocs ne sont pas des objets physiques. Comme tout le reste du jeu, ils
+vivent en espace piste — une abscisse, un intervalle latéral — et la collision
+est un test de franchissement sur deux scalaires. Chacun est habillé de trois
+corps — des éboulis en orbite, des blocs de chantier ailleurs, même règle
+habillée par le décor — et souligné d'un bandeau lumineux de sa propre largeur ;
+deux montants plantés aux lèvres de l'ouverture complètent le dessin. Le tout
+se lit d'un coup : deux barres, un trou entre elles, et le trou est là où il
+faut passer.
+
+Le bandeau prend la texture des portiques, un dégradé vertical, plutôt qu'un
+halo radial : étiré sur vingt unités de large, un halo devient une tache molle,
+tandis qu'un dégradé vertical reste une barre franche. Et l'ombrage des blocs
+est cuit volontairement clair — une masse sombre sur un fond sombre ne se voit
+pas à trois cents unités.
+
+Les adversaires visent l'ouverture quand il y en a une dans les deux cent vingt
+unités devant eux. Sans ça ils traverseraient la roche, ce qui se voit
+immédiatement et ruine l'idée que tout le monde court sur la même piste.
+
 ## Le parcours bonus
 
 METEOR RUN ne se court pas comme les autres, et c'est pour ça qu'un écran
@@ -273,25 +318,13 @@ l'explique avant de lancer : une seule traversée, aucun adversaire, **les gaz
 se mettent seuls**, et la seule décision qui reste est de passer à gauche ou à
 droite d'un barrage.
 
-Un barrage est un rideau de roche en travers de la piste, percé d'une ouverture
-dont la position est tirée au sort. C'est **l'ouverture qui est placée en
-premier** et les blocs qui en découlent, jamais l'inverse : poser des blocs au
-hasard produirait tôt ou tard un mur sans passage, et un parcours où l'on ne
-peut que mourir n'est pas un parcours. Les trente barrages se resserrent vers
-la fin, en puissance 0,88 de l'abscisse.
-
-Les blocs ne sont pas des objets physiques : comme tout le reste du jeu, ils
-vivent en espace piste — une abscisse, un intervalle latéral — et la collision
-est un test de franchissement sur deux scalaires. Chacun est habillé de trois
-rochers et souligné d'un bandeau lumineux de sa propre largeur ; deux montants
-orange plantés aux lèvres de l'ouverture complètent le dessin. Le tout se lit
-d'un coup : deux barres, un trou entre elles, et le trou est là où il faut
-passer. Sans ce balisage, la roche sombre sur fond d'espace noir se voyait trop
-tard.
+Ses trente barrages — contre sept ou huit sur
+un circuit de course — se resserrent vers la fin, en puissance 0,88 de
+l'abscisse, et leur ouverture est un peu plus étroite.
 
 Le tracé est un arc de rayon 3400 sur dix-huit points de contrôle, sans lobe ni
 ondulation : sur les six cents unités qu'on voit devant soi, la piste dévie de
-moins de trois largeurs, et elle se lit comme une ligne droite. Un vrai segment
+moins de deux largeurs, et elle se lit comme une ligne droite. Un vrai segment
 ouvert n'aurait pas de bout — tout le repérage du jeu est en boucle fermée.
 
 ## L'orage
@@ -360,7 +393,9 @@ dans les virages, éviter le joueur quand il arrive à côté.
 | Réglage | Fichier | Effet |
 | --- | --- | --- |
 | `TRACK.halfWidth` | track | largeur de la chaussée — tout le reste s'y accroche |
-| `INPUT.throttleTravel` | config | course du doigt pour aller de 0 à plein gaz |
+| `THEMES[].obstacles` | themes | nombre de barrages, largeur du passage, forme |
+| `INPUT.pitchRange` | config | degrés de tangage entre mi-régime et plein gaz |
+| `INPUT.throttleTravel` | config | repli sans gyroscope : course du doigt |
 | `SHIP.corneringDrift` | config | combien le dévers pousse vers l'extérieur |
 | `RACE.opponents` | config | nombre d'adversaires |
 | `MUSIC.rate*` | config | plage de dérapage de la bande |

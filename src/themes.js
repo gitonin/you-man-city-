@@ -22,6 +22,7 @@ export const THEMES = [
       wobble: [-0.15, 3],
       hills: [34, 19, -11],
     },
+    obstacles: { count: 7, gap: 13, lead: 420, tail: 320, shape: 'block' },
     scenery: 'city',
     walls: 'solid',
     ground: true,
@@ -52,6 +53,7 @@ export const THEMES = [
       wobble: [0.17, 5],
       hills: [18, 9, 22],
     },
+    obstacles: { count: 8, gap: 13, lead: 420, tail: 320, shape: 'block' },
     scenery: 'blocks',
     walls: 'solid',
     ground: true,
@@ -82,6 +84,7 @@ export const THEMES = [
       wobble: [0.12, 2],
       hills: [26, 31, 14],
     },
+    obstacles: { count: 7, gap: 13, lead: 420, tail: 320, shape: 'block' },
     scenery: 'tube',
     walls: 'solid',
     ground: false,
@@ -112,6 +115,7 @@ export const THEMES = [
       wobble: [-0.1, 5],
       hills: [58, 37, 24],
     },
+    obstacles: { count: 8, gap: 13, lead: 420, tail: 320, shape: 'rock' },
     scenery: 'space',
     /** Pas de mur bâti : ce sont les météorites qui tiennent les bas-côtés. */
     walls: 'rocks',
@@ -166,12 +170,12 @@ export const THEMES = [
     opponents: 0,
     /** Les gaz se mettent tout seuls ; il ne reste que la direction. */
     autoThrottle: true,
-    hint: 'INCLINER POUR ESQUIVER',
+    hint: 'PENCHER POUR ESQUIVER',
     /**
      * Barrages : nombre, demi-largeur de l'ouverture laissée libre, et
      * longueurs de piste tenues vierges au départ et à l'arrivée.
      */
-    obstacles: { count: 30, gap: 9, lead: 800, tail: 600 },
+    obstacles: { count: 30, gap: 11, lead: 800, tail: 600, shape: 'rock' },
     fog: { color: 0x04050c, near: 320, far: 1900 },
     sky: [
       [0.0, '#04020c'], [0.4, '#0a0620'], [0.5, '#17103c'],

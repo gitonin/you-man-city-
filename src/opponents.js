@@ -70,7 +70,7 @@ function shipGeometry() {
  * viser une vitesse propre à chacun, lever le pied dans les virages, et
  * tracer une trajectoire sinueuse qui évite le joueur quand il est à côté.
  */
-export function createOpponents(scene, track, theme) {
+export function createOpponents(scene, track, theme, obstacles = null) {
   // Le parcours bonus se court seul : zéro est une valeur acceptée, et un
   // `InstancedMesh` de taille nulle n'est pas une chose à construire.
   const count = theme.opponents ?? RACE.opponents;
@@ -164,6 +164,15 @@ export function createOpponents(scene, track, theme) {
 
         // trajectoire : une sinusoïde lente, déviée si le joueur est à côté
         let lane = Math.sin(r.laneSeed + r.s * r.weave) * limit * 0.55;
+
+        // Un barrage devant : on vise l'ouverture. Sans ça les adversaires
+        // traverseraient la roche, ce qui se voit immédiatement et ruine
+        // l'idée que tout le monde court sur la même piste.
+        if (obstacles) {
+          const slot = obstacles.gapNear(r.s, 220);
+          if (slot !== null) lane = slot;
+        }
+
         const gap = r.s - player.s;
         if (Math.abs(gap) < 14) {
           // l'écart d'évitement suit la largeur de la chaussée, sinon sur une
