@@ -21,6 +21,12 @@ La manette est un levier : elle reste où on la laisse, on ne garde pas le doigt
 appuyé. Trois tours, cinq adversaires, les chevrons orange donnent une
 survitesse, les murs et les accrochages coûtent du bouclier.
 
+Le son et les capteurs sont réclamés **au tout premier appui**, celui qui amène
+sur le titre. L'ordre n'est pas libre : le son d'abord et sans attendre, les
+capteurs ensuite. iOS ouvre une boîte de dialogue pour `requestPermission`, et
+toute attente avant `play()` ferait sortir du contexte de geste, auquel cas le
+son serait refusé. Refusés, les capteurs sont redemandés à la tape suivante.
+
 Sans gyroscope (ordinateur, ou capteurs refusés) : la moitié gauche de l'écran
 dirige, la moitié droite fait manette ; au clavier, flèches gauche/droite pour
 diriger, haut/bas ou espace pour les gaz, majuscule pour le turbo. Le sens de
@@ -45,6 +51,7 @@ tenu dans le mauvais sens, un écran le dit.
 | **GREY DISTRICT** | averse, brume épaisse, blocs de béton serrés contre la piste |
 | **CHROMA TUBE** | boyau presque entièrement couvert, voûte en écrans arc-en-ciel |
 | **RING OF DUST** | le vide, aucun sol, aucun mur : les météorites font les bas-côtés |
+| **METEOR RUN** | parcours bonus : ligne droite, aucun adversaire, esquiver des barrages |
 
 Les meilleurs temps sont gardés par circuit dans le navigateur.
 
@@ -94,8 +101,13 @@ le tremblement de la géométrie en mouvement.
 tordent sur les grands polygones. Le GPU, lui, interpole *avec* correction. On
 la défait en transportant `uv * w` et `w` dans deux varyings, puis en divisant
 l'un par l'autre dans le fragment — ce qui redonne exactement une interpolation
-linéaire à l'écran. C'est pour ça que la piste n'a qu'un seul quad en travers :
-plus le polygone est grand, plus la torsion se voit.
+linéaire à l'écran. Plus le polygone est grand, plus la torsion se voit, d'où
+une piste volontairement grossière : **trois quads en travers**. Elle n'en a eu
+qu'un pendant longtemps, ce qui était encore mieux — jusqu'à ce que la chaussée
+passe à trente-cinq unités de large et que la carlingue disparaisse du bas de
+l'image. Le bord le plus proche était alors vu si rasant qu'un unique texel
+s'étalait sur un tiers de l'écran. Pour la même raison, l'œil est monté de 2,9
+à 4,4 unités au-dessus du revêtement.
 
 **Éclairage cuit.** Aucune lampe dans la scène. La lumière est calculée à la
 construction et rangée dans la couleur des sommets, comme à l'époque.
@@ -104,6 +116,19 @@ construction et rangée dans la couleur des sommets, comme à l'époque.
 pixels de haut, puis étirée au plein écran au plus proche voisin. La passe
 finale réduit à 15 bits avec un tramage ordonné 4×4, ajoute les lignes de
 balayage, la pluie, le bombement du tube et la vignette.
+
+## Le décompte
+
+Trois, deux, un, go — et chaque chiffre claque. `pop` descend de 1 à 0 depuis
+son apparition et fait trois choses à la fois : le chiffre naît grand et se
+resserre, les trois composantes de couleur partent écartées et se recollent, et
+le bandeau derrière lui s'ouvre. L'image prend un coup de corruption au même
+instant. Un chiffre qui apparaîtrait simplement, à taille fixe, ne donnerait
+aucune impulsion — c'est le resserrement qui fait le compte.
+
+La fonte étant une matrice de pixels dessinée au carré, le « zoom » est un
+changement d'échelle entière : on ne peut pas grossir de 1,37, donc on choisit
+l'entier le plus proche. Le pas se voit, et c'est tant mieux.
 
 ## Le glitch
 
@@ -159,12 +184,20 @@ nommée, sans quoi la barre semblerait figée à 80 %. Si la bande-son est
 introuvable, on entre quand même, en le disant : le jeu reste jouable, le volet
 rythmique se tait.
 
+**La courbe de vitesse a trois points, pas deux.** Une rampe droite de l'arrêt
+au plein régime faisait monter le morceau d'un ton et demi sur la seconde
+moitié de la plage, là où l'on passe le plus de temps : c'était du dessin
+animé. On garde donc le ralenti au départ, on cale la vitesse normale à
+mi-régime — c'est l'allure de croisière du jeu, le morceau doit y sonner comme
+il a été écrit — et la montée au-delà n'est plus qu'une inflexion.
+
 | Vitesse | Lecture |
 | --- | --- |
 | à l'arrêt | ×0.68 |
-| plein régime | ×1.22 |
-| survitesse | ×1.38 |
-| turbo | ×1.50 |
+| **mi-régime** | **×1.00** |
+| plein régime | ×1.10 |
+| survitesse | ×1.15 |
+| turbo | ×1.20 |
 
 **Le tempo.** Le fichier a été mesuré : **119 BPM pile**, premier temps à
 46 ms, grille vérifiée du début à la fin du morceau. La position de lecture
@@ -232,6 +265,34 @@ média. Jouer sur la vitesse ne dépend, lui, de rien.
 Pour changer de morceau : remplacer `assets/reborn.mp3`, puis ajuster `MUSIC`
 dans `src/config.js` — en particulier `bpm` et `beatOffset`, sans quoi le volet
 rythmique bat à côté.
+
+## Le parcours bonus
+
+METEOR RUN ne se court pas comme les autres, et c'est pour ça qu'un écran
+l'explique avant de lancer : une seule traversée, aucun adversaire, **les gaz
+se mettent seuls**, et la seule décision qui reste est de passer à gauche ou à
+droite d'un barrage.
+
+Un barrage est un rideau de roche en travers de la piste, percé d'une ouverture
+dont la position est tirée au sort. C'est **l'ouverture qui est placée en
+premier** et les blocs qui en découlent, jamais l'inverse : poser des blocs au
+hasard produirait tôt ou tard un mur sans passage, et un parcours où l'on ne
+peut que mourir n'est pas un parcours. Les trente barrages se resserrent vers
+la fin, en puissance 0,88 de l'abscisse.
+
+Les blocs ne sont pas des objets physiques : comme tout le reste du jeu, ils
+vivent en espace piste — une abscisse, un intervalle latéral — et la collision
+est un test de franchissement sur deux scalaires. Chacun est habillé de trois
+rochers et souligné d'un bandeau lumineux de sa propre largeur ; deux montants
+orange plantés aux lèvres de l'ouverture complètent le dessin. Le tout se lit
+d'un coup : deux barres, un trou entre elles, et le trou est là où il faut
+passer. Sans ce balisage, la roche sombre sur fond d'espace noir se voyait trop
+tard.
+
+Le tracé est un arc de rayon 3400 sur dix-huit points de contrôle, sans lobe ni
+ondulation : sur les six cents unités qu'on voit devant soi, la piste dévie de
+moins de trois largeurs, et elle se lit comme une ligne droite. Un vrai segment
+ouvert n'aurait pas de bout — tout le repérage du jeu est en boucle fermée.
 
 ## L'orage
 

@@ -245,13 +245,45 @@ export function createHud() {
     texture.needsUpdate = true;
   }
 
+  /**
+   * Le gros message central, et le décompte en particulier.
+   *
+   * `v.pop` descend de 1 à 0 depuis l'apparition du chiffre. Il fait trois
+   * choses à la fois : le chiffre naît grand et se resserre, les trois
+   * composantes de couleur partent écartées et se recollent, et le bandeau
+   * derrière lui s'ouvre. Un chiffre qui apparaît simplement, à taille fixe,
+   * ne donne aucune impulsion — c'est le resserrement qui fait le compte.
+   *
+   * La fonte étant une matrice de pixels dessinée au carré, le « zoom » est
+   * un changement d'échelle entière : on ne peut pas grossir de 1,37, donc on
+   * choisit l'entier le plus proche. Le pas se voit, et c'est tant mieux.
+   */
   function drawCenter(v, W, H, m) {
-    const scale = m * 4;
+    const pop = Math.max(0, Math.min(1, v.pop || 0));
+    const base = m * 7;
+    const scale = Math.max(1, Math.round(base * (1 + pop * 0.7)));
     const w = measure(v.center, scale);
-    const y = Math.round(H * 0.4);
-    ctx.fillStyle = 'rgba(6, 10, 16, 0.5)';
-    ctx.fillRect(0, y - 4 * m, W, 7 * scale + 8 * m);
-    write(v.center, Math.round((W - w) / 2), y, scale, v.center === 'GO' ? CYAN : INK);
+    const x = Math.round((W - w) / 2);
+    const y = Math.round(H * 0.36 - (scale - base) * 3.5);
+
+    // bandeau : il s'ouvre avec le chiffre
+    const bandH = 7 * scale + 8 * m;
+    ctx.fillStyle = `rgba(6, 10, 16, ${0.5 + pop * 0.28})`;
+    ctx.fillRect(0, y - 4 * m, W, bandH);
+
+    const tint = v.center === 'GO' ? CYAN : INK;
+    if (pop > 0.02) {
+      // séparation des composantes, d'autant plus large que le chiffre est
+      // jeune : les deux calques de couleur se recollent sur le blanc
+      const off = Math.round(pop * scale * 1.6);
+      const jitter = Math.round((Math.random() - 0.5) * pop * scale * 1.2);
+      ctx.globalCompositeOperation = 'lighter';
+      write(v.center, x - off + jitter, y, scale, 'rgba(255, 46, 107, 0.85)');
+      write(v.center, x + off - jitter, y, scale, 'rgba(95, 240, 255, 0.85)');
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    write(v.center, x, y, scale, tint);
+
     if (v.sub) {
       const sw = measure(v.sub, m);
       write(v.sub, Math.round((W - sw) / 2), y + 7 * scale + 2 * m, m, DIM);

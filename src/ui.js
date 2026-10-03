@@ -30,6 +30,7 @@ export function createUi(store, handlers) {
     boot: $('screen-boot'),
     title: $('screen-title'),
     select: $('screen-select'),
+    brief: $('screen-brief'),
     scores: $('screen-scores'),
     controls: $('screen-controls'),
     pause: $('screen-pause'),
@@ -64,6 +65,8 @@ export function createUi(store, handlers) {
   const centerChip = $('btn-center');
 
   let current = 'boot';
+  /** Le circuit décrit par l'écran de briefing, le temps qu'on le lise. */
+  let briefed = null;
 
   function show(name) {
     current = name;
@@ -98,9 +101,22 @@ export function createUi(store, handlers) {
       card.querySelector('.tag').textContent = theme.tag;
       card.querySelector('.desc').textContent = theme.blurb;
       card.querySelector('.best').textContent = best
-        ? `record ${formatTime(best.total)} · tour ${formatTime(best.lap)}`
+        ? (theme.bonus
+          ? `record ${formatTime(best.total)}`
+          : `record ${formatTime(best.total)} · tour ${formatTime(best.lap)}`)
         : 'jamais couru';
-      card.addEventListener('click', () => handlers.onStart(theme.id));
+      if (theme.bonus) card.classList.add('bonus');
+      // Le parcours bonus ne se joue pas comme les autres : on l'explique
+      // avant, sinon on découvre la règle en percutant le premier barrage.
+      card.addEventListener('click', () => {
+        if (theme.bonus) {
+          briefed = theme;
+          $('brief-name').textContent = theme.name;
+          show('brief');
+        } else {
+          handlers.onStart(theme.id);
+        }
+      });
       list.appendChild(card);
     }
   }
@@ -169,6 +185,7 @@ export function createUi(store, handlers) {
     el.addEventListener('click', () => show(el.dataset.back));
   }
   $('wipe-scores').addEventListener('click', () => { store.wipe(); renderScores(); });
+  $('brief-go').addEventListener('click', () => { if (briefed) handlers.onStart(briefed.id); });
 
   $('btn-pause').addEventListener('click', () => handlers.onPause());
   $('pause-resume').addEventListener('click', () => handlers.onResume());

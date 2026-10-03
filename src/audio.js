@@ -512,7 +512,12 @@ export function createAudio({ context = null } = {}) {
      */
     setSpeed(normalized, boost, turbo, dt) {
       const n = clamp(normalized, 0, 1.3);
-      let want = MUSIC.rateIdle + (MUSIC.rateMax - MUSIC.rateIdle) * clamp(n, 0, 1);
+      // Deux segments autour du mi-régime : fort en bas pour que le départ
+      // traîne, presque plat en haut pour qu'on ne parte pas dans les aigus.
+      const h = clamp(n, 0, 1);
+      let want = h < 0.5
+        ? MUSIC.rateIdle + (MUSIC.rateMid - MUSIC.rateIdle) * (h / 0.5)
+        : MUSIC.rateMid + (MUSIC.rateMax - MUSIC.rateMid) * ((h - 0.5) / 0.5);
       if (boost > 0) want += (MUSIC.rateBoost - MUSIC.rateMax) * clamp(boost, 0, 1);
       if (turbo > 0) want += (MUSIC.rateTurbo - MUSIC.rateBoost) * clamp(turbo, 0, 1);
       target = clamp(want, MUSIC.rateFloor, MUSIC.rateCeiling);

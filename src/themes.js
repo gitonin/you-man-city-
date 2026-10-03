@@ -133,6 +133,57 @@ export const THEMES = [
     billboards: ['#8fb4ff', '#ffffff', '#ff8f5e'],
     accent: 0x8fb4ff,
   },
+
+  {
+    id: 'rush',
+    name: 'METEOR RUN',
+    tag: 'bonus · ligne droite · esquive',
+    blurb: 'Une seule traversée, personne devant, aucune manette : esquiver, c’est tout.',
+    bonus: true,
+    /**
+     * Un rayon de 4600 sur dix-huit points de contrôle, sans lobe ni
+     * ondulation : sur les six cents unités qu'on voit devant soi, la piste
+     * dévie de moins de deux largeurs. Elle se lit comme une ligne droite. Un
+     * vrai segment ouvert, lui, n'aurait pas de bout — tout le repérage du
+     * jeu est en boucle fermée. Une seule houle sur le tour, pour que la
+     * traversée respire.
+     */
+    shape: {
+      radius: 3400,
+      lobe: [0, 1],
+      wobble: [0, 2],
+      hills: [70, 0, 0],
+    },
+    scenery: 'space',
+    walls: 'rocks',
+    roadStyle: 'plate',
+    ground: false,
+    rain: 0,
+    tunnels: [],
+    boosts: [],
+    /** Une traversée, pas de concurrence : c'est un parcours, pas une course. */
+    laps: 1,
+    opponents: 0,
+    /** Les gaz se mettent tout seuls ; il ne reste que la direction. */
+    autoThrottle: true,
+    hint: 'INCLINER POUR ESQUIVER',
+    /**
+     * Barrages : nombre, demi-largeur de l'ouverture laissée libre, et
+     * longueurs de piste tenues vierges au départ et à l'arrivée.
+     */
+    obstacles: { count: 30, gap: 9, lead: 800, tail: 600 },
+    fog: { color: 0x04050c, near: 320, far: 1900 },
+    sky: [
+      [0.0, '#04020c'], [0.4, '#0a0620'], [0.5, '#17103c'],
+      [0.56, '#0b0824'], [1.0, '#04020c'],
+    ],
+    stars: 210,
+    road: { base: '#2a2536', shades: ['#332c41', '#221d2c', '#3d3550'], kerb: ['#ffe9c4', '#ff7a2f'] },
+    wall: { base: '#2b2740', panels: ['#332e4a', '#262238', '#3b3554'], strip: '#ffa23c', stripDark: '#8c4a1b' },
+    windows: ['#ffd9a8', '#ffa23c', '#ffffff'],
+    billboards: ['#ffa23c', '#ffffff', '#ff5e3c'],
+    accent: 0xffa23c,
+  },
 ];
 
 export const themeById = (id) => THEMES.find((t) => t.id === id) || THEMES[0];

@@ -228,9 +228,18 @@ export function buildTrack(scene, theme) {
   const HW = TRACK.halfWidth;
   const WH = TRACK.wallHeight;
 
-  // piste : un seul quad en travers, pour que le placage affine se voie
+  // Piste : trois quads en travers. Un seul laissait voir le placage affine
+  // de la plus belle façon, mais depuis que la chaussée fait trente-cinq
+  // unités de large et qu'aucune carlingue ne masque le bas de l'image, le
+  // bord le plus proche est vu si rasant qu'un unique texel s'étalait sur un
+  // tiers de l'écran. Trois quads gardent la torsion et suppriment la bavure.
+  const lanes = 3;
+  const roadProfile = [];
+  for (let i = 0; i <= lanes; i++) {
+    roadProfile.push({ lat: -HW + (2 * HW * i) / lanes, up: 0, u: i / lanes });
+  }
   root.add(new Mesh(
-    extrude([{ lat: -HW, up: 0, u: 0 }, { lat: HW, up: 0, u: 1 }], { vScale: roadTile }),
+    extrude(roadProfile, { vScale: roadTile }),
     psxMaterial({ map: makeRoadTexture(theme) })
   ));
 

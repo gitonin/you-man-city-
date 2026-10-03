@@ -29,6 +29,8 @@ const makeFrame = () => ({
 export function createShip(camera) {
   /** Le circuit change d'une course à l'autre ; le bolide, non. */
   let track = null;
+  /** Le parcours bonus se court en une traversée : la règle vient du thème. */
+  let laps = RACE.laps;
   const frame = makeFrame();
   const ahead = makeFrame();
 
@@ -155,7 +157,7 @@ export function createShip(camera) {
         if (!state.bestLap || state.lapTime < state.bestLap) state.bestLap = state.lapTime;
         state.lapTime = 0;
         state.lapThisFrame = true;
-        if (state.lap >= RACE.laps) state.finished = true;
+        if (state.lap >= laps) state.finished = true;
       }
     }
 
@@ -173,13 +175,16 @@ export function createShip(camera) {
       + Math.sin(hoverPhase * 2.3) * SHIP.hoverAmp * 0.4;
     const jolt = state.shake * state.shake;
 
+    // Hauteur de l'œil. Relevée depuis le retrait de la carlingue : à 2,9 le
+    // bitume juste devant arrivait sous un angle si rasant qu'il devenait une
+    // bavure, et plus rien ne la cachait.
     camera.position.copy(frame.position)
       .addScaledVector(frame.binormal, state.x + (Math.random() - 0.5) * jolt * 1.6)
-      .addScaledVector(frame.normal, 2.9 + hover + (Math.random() - 0.5) * jolt * 1.4);
+      .addScaledVector(frame.normal, 4.4 + hover + (Math.random() - 0.5) * jolt * 1.4);
 
     target.copy(ahead.position)
       .addScaledVector(ahead.binormal, state.x * 0.45)
-      .addScaledVector(ahead.normal, 2.6);
+      .addScaledVector(ahead.normal, 3.6);
 
     const lean = frame.bank * 0.85 + clamp(state.xVel * 0.013, -0.3, 0.3);
     roll.setFromAxisAngle(frame.tangent, -lean);
@@ -191,7 +196,12 @@ export function createShip(camera) {
   return {
     state,
     /** Branche le bolide sur un nouveau circuit. */
-    attach(next) { track = next; reset(); },
+    attach(next) {
+      track = next;
+      laps = next.theme.laps || RACE.laps;
+      reset();
+    },
+    get laps() { return laps; },
     reset,
     update,
     knock,

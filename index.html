@@ -29,6 +29,30 @@
       <rect x="-40" y="-20" width="600" height="64" />
       <rect x="-40" y="52" width="600" height="79" />
     </clipPath>
+    <!-- REBORN : mêmes proportions que YOU MAN — 68 de large par lettre,
+         10 d'écart, 100 de haut — pour que les deux mots soient de la même
+         main. R, E et B sont construits ici ; O et N sont repris tels quels,
+         décalés. -->
+    <g id="ym-reborn" clip-path="url(#ym-slot)">
+      <!-- R -->
+      <path fill-rule="evenodd" d="M0,0 L50,0 L68,18 L68,44 L54,56 L68,100 L48,100 L36,62 L18,62 L18,100 L0,100 Z
+        M18,16 L44,16 L50,22 L50,40 L44,46 L18,46 Z" />
+      <!-- E -->
+      <path d="M78,0 L146,0 L146,16 L96,16 L96,40 L136,40 L136,56 L96,56 L96,84 L146,84 L146,100 L78,100 Z" />
+      <!-- B -->
+      <path fill-rule="evenodd" d="M156,0 L206,0 L224,16 L224,38 L214,48 L224,58 L224,84 L206,100 L156,100 Z
+        M174,16 L200,16 L206,22 L206,36 L200,42 L174,42 Z
+        M174,58 L200,58 L206,64 L206,78 L200,84 L174,84 Z" />
+      <!-- O -->
+      <path fill-rule="evenodd" d="M234,16 L250,0 L286,0 L302,16 L302,84 L286,100 L250,100 L234,84 Z
+        M252,22 L258,16 L278,16 L284,22 L284,78 L278,84 L258,84 L252,78 Z" />
+      <!-- R -->
+      <path fill-rule="evenodd" d="M312,0 L362,0 L380,18 L380,44 L366,56 L380,100 L360,100 L348,62 L330,62 L330,100 L312,100 Z
+        M330,16 L356,16 L362,22 L362,40 L356,46 L330,46 Z" />
+      <!-- N -->
+      <path d="M390,0 L408,0 L440,58 L440,0 L458,0 L458,100 L440,100 L408,42 L408,100 L390,100 Z" />
+    </g>
+
     <g id="ym-word" clip-path="url(#ym-slot)">
       <!-- Y -->
       <path d="M0,0 L18,0 L34,34 L50,0 L68,0 L43,48 L43,100 L25,100 L25,48 Z" />
@@ -55,14 +79,18 @@
     <!-- ===================== CHARGEMENT ===================== -->
     <section id="screen-boot" class="screen">
       <div class="inner">
-        <div class="wordmark" aria-label="You Man">
-          <svg class="ym" viewBox="-16 -8 514 116" role="img">
+        <div class="wordmark" aria-label="Reborn — You Man">
+          <svg class="ym ym-title" viewBox="-16 -8 490 116" role="img">
+            <use href="#ym-reborn" class="ym-c" />
+            <use href="#ym-reborn" class="ym-m" />
+            <use href="#ym-reborn" class="ym-w" />
+          </svg>
+          <svg class="ym ym-sub" viewBox="-16 -8 514 116" aria-hidden="true">
             <use href="#ym-word" class="ym-c" />
             <use href="#ym-word" class="ym-m" />
             <use href="#ym-word" class="ym-w" />
           </svg>
         </div>
-        <p class="eyebrow">reborn</p>
         <div id="boot-load" class="loadbar boot">
           <i></i><span>démarrage</span>
         </div>
@@ -75,15 +103,19 @@
     <!-- ===================== TITRE ===================== -->
     <section id="screen-title" class="screen" hidden>
       <div class="inner">
-        <div class="wordmark" aria-label="You Man">
-          <svg class="ym" viewBox="-16 -8 514 116" role="img">
+        <div class="wordmark" aria-label="Reborn — You Man">
+          <svg class="ym ym-title" viewBox="-16 -8 490 116" role="img">
+            <use href="#ym-reborn" class="ym-c" />
+            <use href="#ym-reborn" class="ym-m" />
+            <use href="#ym-reborn" class="ym-w" />
+          </svg>
+          <svg class="ym ym-sub" viewBox="-16 -8 514 116" aria-hidden="true">
             <use href="#ym-word" class="ym-c" />
             <use href="#ym-word" class="ym-m" />
             <use href="#ym-word" class="ym-w" />
           </svg>
         </div>
-        <p class="eyebrow">reborn</p>
-        <p class="blurb">Antigravité. Quatre circuits.<br />La bande-son dérape avec vous.</p>
+        <p class="blurb">Antigravité. Quatre circuits, un parcours bonus.<br />La bande-son dérape avec vous.</p>
 
         <div class="menu">
           <button id="go-select" class="cta">Courir</button>
@@ -100,6 +132,24 @@
         <p class="eyebrow">choisir un circuit</p>
         <div id="track-list" class="cards"></div>
         <button class="cta ghosty back" data-back="title">Retour</button>
+      </div>
+    </section>
+
+    <!-- ===================== BRIEFING BONUS ===================== -->
+    <section id="screen-brief" class="screen" hidden>
+      <div class="inner wide">
+        <p class="eyebrow">parcours bonus</p>
+        <h2 id="brief-name" class="headline">METEOR RUN</h2>
+        <ul class="howto">
+          <li><b>Une seule traversée</b> — pas de tours, pas d'adversaires</li>
+          <li><b>Les gaz se mettent seuls</b> — la manette ne sert à rien ici</li>
+          <li><b>Incliner pour esquiver</b> — c'est la seule commande</li>
+          <li><b>Chaque barrage a un passage</b> — deux montants orange le marquent</li>
+          <li><b>Une roche touchée coûte cher</b> — bouclier à zéro, et c'est fini</li>
+        </ul>
+        <p class="fineprint">le temps de la traversée est gardé comme un record</p>
+        <button id="brief-go" class="cta">Lancer la traversée</button>
+        <button class="cta ghosty back" data-back="select">Retour</button>
       </div>
     </section>
 

@@ -14,6 +14,7 @@ import { setPsxGrid } from './psx.js';
 import { setTextureAnisotropy } from './textures.js';
 import { buildTrack } from './track.js';
 import { buildScenery } from './scenery.js';
+import { createObstacles } from './obstacles.js';
 import { createShip } from './ship.js';
 import { createOpponents } from './opponents.js';
 import { createRhythm } from './rhythm.js';
@@ -99,6 +100,7 @@ function loadTrack(themeId) {
     disposeTree(world.track.root);
     disposeTree(world.scenery.root);
     disposeTree(world.opponents.group);
+    disposeTree(world.obstacles.group);
     disposeTree(world.rhythm.bars);
   }
 
@@ -106,6 +108,7 @@ function loadTrack(themeId) {
   const track = buildTrack(scene, theme);
   const scenery = buildScenery(scene, track, theme);
   const opponents = createOpponents(scene, track, theme);
+  const obstacles = createObstacles(scene, track, theme);
   const rhythm = createRhythm(scene, track, audio, theme);
 
   scene.fog.color.set(theme.fog.color);
@@ -115,7 +118,7 @@ function loadTrack(themeId) {
   post.setTheme(theme);
 
   ship.attach(track);
-  world = { theme, track, scenery, opponents, rhythm };
+  world = { theme, track, scenery, opponents, obstacles, rhythm };
   return world;
 }
 
@@ -184,6 +187,9 @@ let fade = 0;
 let glitchOverride = null;
 /** L'annonceur ne prévient qu'une fois par course du bouclier bas. */
 let shieldWarned = false;
+/** Retombée du gros message central : pilote le zoom et l'écartement RVB. */
+let centerPop = 0;
+let goUntil = 0;
 const glitch = { hit: 0, burst: 0, burstTime: 0, nextRoll: 0 };
 
 const clock = new Clock();
@@ -253,14 +259,33 @@ const ui = createUi(store, {
 });
 
 /**
- * Le son ne peut démarrer que dans un geste. On prend le tout premier, puis
- * on retente à chaque tape tant que le navigateur refuse : sur mobile, la
+ * Son et capteurs se réclament tous deux dans un geste de l'utilisateur, et
+ * on prend donc le tout premier — celui qui amène sur le titre.
+ *
+ * L'ordre n'est pas libre : le son d'abord et **sans attendre**, les capteurs
+ * ensuite. iOS ouvre une boîte de dialogue pour `requestPermission`, et toute
+ * attente avant `play()` ferait sortir du contexte de geste, auquel cas le son
+ * serait refusé.
+ *
+ * On retente à chaque tape tant que l'un des deux manque : sur mobile, la
  * première tentative tombe parfois au mauvais moment du cycle de vie.
  */
+let gyroAsked = false;
 dom.frame.addEventListener('pointerdown', () => {
-  if (audio.playing) return;
-  audio.start();
-  setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 400);
+  const needSound = !audio.playing;
+  if (needSound) audio.start();
+
+  if (!gyroAsked) {
+    gyroAsked = true;
+    controls.enableGyro().then((ok) => {
+      // refusé : on laisse la porte ouverte pour une prochaine tape
+      gyroAsked = ok;
+      ui.setGyro(ok);
+      applySettings();
+    });
+  }
+
+  if (needSound) setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 400);
 });
 
 async function startRace(themeId) {
@@ -272,6 +297,7 @@ async function startRace(themeId) {
 
   ship.reset();
   world.opponents.reset();
+  world.obstacles.reset();
   world.rhythm.reset();
   controls.reset();
   topSpeed = 0;
@@ -281,9 +307,14 @@ async function startRace(themeId) {
   phase = 'countdown';
   ui.hideAll();
 
-  const gotGyro = await controls.enableGyro();
-  ui.setGyro(gotGyro);
-  applySettings();
+  // Les capteurs ont normalement été demandés au tout premier geste, sur le
+  // titre. On retente ici pour le cas où ils auraient été refusés alors.
+  if (!controls.state.gyroEnabled) {
+    const gotGyro = await controls.enableGyro();
+    gyroAsked = gotGyro;
+    ui.setGyro(gotGyro);
+    applySettings();
+  }
   setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 500);
   clock.getDelta();
 }
@@ -356,7 +387,7 @@ function hudState(center, sub) {
   const s = ship.state;
   return {
     lap: s.lap,
-    laps: RACE.laps,
+    laps: ship.laps,
     rank: s.rank,
     field: world ? world.opponents.total : RACE.opponents + 1,
     lapTime: s.lapTime,
@@ -370,6 +401,7 @@ function hudState(center, sub) {
     pulse: world ? world.rhythm.state.pulse : 0,
     center,
     sub,
+    pop: centerPop,
     bare: phase === 'menu' || phase === 'paused' || phase === 'finish',
   };
 }
@@ -409,6 +441,8 @@ function frame() {
 
   let center = '';
   let sub = '';
+  // retombée de l'apparition du gros message : 1 au moment du changement
+  centerPop = Math.max(0, centerPop - dt * 3.4);
 
   if (phase === 'paused') {
     audio.idleEngine();
@@ -425,16 +459,25 @@ function frame() {
       audio.tick(false);
       audio.say(['', 'one', 'two', 'three'][Math.min(n, 3)]);
       lastBeep = n;
+      // chaque chiffre claque : le HUD le fait naître grand et décollé, et
+      // l'image prend un coup de corruption en même temps
+      centerPop = 1;
+      glitch.hit = Math.max(glitch.hit, GLITCH.hitBurst * 0.75);
     }
     if (countdown <= 0) {
       phase = 'racing';
       audio.tick(true);
       audio.say('go', { level: 1.1 });
+      centerPop = 1;
+      goUntil = t + 0.75;
+      glitch.hit = Math.max(glitch.hit, GLITCH.hitBurst);
     } else {
       center = String(Math.max(1, n));
-      sub = 'GLISSER VERS LE HAUT POUR ACCELERER';
+      sub = world.theme.hint || 'GLISSER VERS LE HAUT POUR ACCELERER';
     }
   }
+  // le « GO » survit au changement de phase, le temps de se recoller
+  if (t < goUntil) center = 'GO';
 
   const demo = phase === 'menu' || phase === 'finish';
   const racing = phase === 'racing' || demo;
@@ -442,8 +485,10 @@ function frame() {
     ? demoInput()
     : {
       steer: controls.state.steer,
-      throttle: controls.state.throttle,
-      turboRequested: controls.consumeTurbo(),
+      // Sur le parcours bonus, les gaz se mettent seuls : la seule décision
+      // qui reste au joueur est de passer à gauche ou à droite.
+      throttle: world && world.theme.autoThrottle ? 1 : controls.state.throttle,
+      turboRequested: world && world.theme.autoThrottle ? false : controls.consumeTurbo(),
     };
 
   const prevS = ship.state.s;
@@ -458,6 +503,12 @@ function frame() {
       audio.dip(0.45);
     }
     ship.state.rank = world.opponents.rankOf(ship.state.s);
+    if (phase === 'racing' && world.obstacles.update(prevS, ship.state.s, ship.state.x)) {
+      // on recule du côté le plus dégagé, et ça coûte cher : c'est l'épreuve
+      ship.knock(-Math.sign(ship.state.x) || 1, 0.62, 18);
+      audio.hit(1.1);
+      audio.dip(1);
+    }
     world.rhythm.update(dt, ship.state.s, prevS, phase === 'racing');
     world.scenery.update(dt);
   }
@@ -476,7 +527,7 @@ function frame() {
   }
   if (ship.state.lapThisFrame && !ship.state.finished) {
     audio.tick(true);
-    if (ship.state.lap === RACE.laps - 1) {
+    if (ship.state.lap === ship.laps - 1) {
       audio.say('final', { when: 0.12 });
       audio.say('lap', { when: 0.56 });
     } else {

@@ -70,6 +70,7 @@ body[data-orient="paysage"] #frame {
 body[data-orient="paysage"] .inner { max-width: 46ch; }
 body[data-orient="paysage"] .inner.wide { max-width: 64ch; }
 body[data-orient="paysage"] .cards { grid-template-columns: 1fr 1fr; }
+body[data-orient="paysage"] #screen-brief .howto { grid-template-columns: 1fr 1fr; }
 body[data-orient="paysage"] .opts { grid-template-columns: 1fr 1fr; }
 body[data-orient="paysage"] .howto { grid-template-columns: 1fr 1fr; margin-bottom: 10px; }
 body[data-orient="paysage"] .howto li { padding: 6px 10px; }
@@ -104,25 +105,59 @@ body[data-orient="paysage"] .blurb { margin-bottom: 14px; }
   overflow: visible;
   transform: skewX(-7deg);
 }
+/* REBORN domine, YOU MAN signe en dessous. */
+.ym-sub { width: 56%; margin: 7px auto 0; }
+
 .ym use { transform-box: fill-box; }
-.ym-w { fill: #ffffff; }
-.ym-m { fill: var(--hot); mix-blend-mode: screen; animation: ym-a 3.3s steps(1) infinite; }
-.ym-c { fill: var(--cyan); mix-blend-mode: screen; animation: ym-b 2.7s steps(1) infinite; }
+.ym-w { fill: #ffffff; animation: ym-w 4.1s steps(1) infinite; }
+/* Les deux calques de couleur sont décalés en permanence d'une fraction de
+   lettre — c'est la séparation de composantes d'un signal mal recollé —, et
+   la rafale les écarte franchement. En `steps(1)`, donc sans interpolation :
+   un décrochage se produit, il ne se survole pas. */
+.ym-m {
+  fill: var(--hot);
+  mix-blend-mode: screen;
+  transform: translate(0.5%, -0.4%);
+  animation: ym-a 3.3s steps(1) infinite;
+}
+.ym-c {
+  fill: var(--cyan);
+  mix-blend-mode: screen;
+  transform: translate(-0.5%, 0.4%);
+  animation: ym-b 2.7s steps(1) infinite;
+}
+.ym-sub .ym-m { animation-duration: 2.3s; }
+.ym-sub .ym-c { animation-duration: 3.7s; }
 
 @keyframes ym-a {
-  0%, 93% { transform: none; }
-  94% { transform: translate(-1.6%, 1.5%); }
-  96% { transform: translate(2.2%, -1%); }
-  98% { transform: translate(-0.8%, 0); }
+  0%, 82% { transform: translate(0.5%, -0.4%); }
+  83% { transform: translate(-5.5%, 2.4%) scaleY(1.04); }
+  85% { transform: translate(6.5%, -1.8%); }
+  87% { transform: translate(-2.5%, 0.6%); }
+  89%, 95% { transform: translate(0.5%, -0.4%); }
+  96% { transform: translate(4.5%, 1.2%); }
+  98% { transform: translate(-1.5%, -0.8%); }
 }
 @keyframes ym-b {
-  0%, 91% { transform: none; }
-  92% { transform: translate(1.8%, -1.5%); }
-  95% { transform: translate(-2.4%, 1.2%); }
-  97% { transform: translate(1%, 0.6%); }
+  0%, 80% { transform: translate(-0.5%, 0.4%); }
+  81% { transform: translate(6%, -2.6%) scaleY(0.96); }
+  84% { transform: translate(-7%, 1.6%); }
+  86% { transform: translate(2%, -0.5%); }
+  88%, 93% { transform: translate(-0.5%, 0.4%); }
+  94% { transform: translate(-4%, -1.4%); }
+  97% { transform: translate(1.5%, 0.9%); }
+}
+/* le blanc décroche aussi, mais plus brièvement : c'est lui qui donne la
+   secousse, les couleurs ne font que la colorer */
+@keyframes ym-w {
+  0%, 88% { transform: none; }
+  89% { transform: translate(2.5%, 0); }
+  90% { transform: translate(-3%, 0); }
+  91% { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ym-m, .ym-c { animation: none; opacity: 0.3; }
+  .ym-m, .ym-c, .ym-w { animation: none; }
+  .ym-m, .ym-c { opacity: 0.3; }
 }
 
 /* ------------------------------------------------------------- écrans */
@@ -232,6 +267,8 @@ body[data-orient="paysage"] .blurb { margin-bottom: 14px; }
   overflow: hidden;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.12s ease;
 }
+.card.bonus { border-style: dashed; }
+.card.bonus .tag { color: var(--amber); }
 .card:hover, .card:focus-visible { border-color: rgba(95, 240, 255, 0.6); background: rgba(14, 26, 38, 0.9); }
 .card:active { transform: scale(0.99); }
 .card::before {

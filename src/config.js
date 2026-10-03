@@ -90,11 +90,21 @@ export const MUSIC = {
   bpm: 119,
   /** Position du premier temps, en secondes. */
   beatOffset: 0.0464,
-  /** Vitesse de lecture : à l'arrêt, à plein régime, en survitesse, en turbo. */
+  /**
+   * Vitesse de lecture, en trois points plutôt qu'en deux.
+   *
+   * Une rampe droite de l'arrêt au plein régime faisait monter le morceau d'un
+   * ton et demi sur la seconde moitié de la plage, là où l'on passe le plus de
+   * temps : c'était du dessin animé. On garde donc le ralenti au départ, on
+   * cale la **vitesse normale à mi-régime** — c'est l'allure de croisière du
+   * jeu, le morceau doit y sonner comme il a été écrit —, et la montée au-delà
+   * n'est plus qu'une inflexion. La survitesse et le turbo ajoutent par-dessus.
+   */
   rateIdle: 0.68,
-  rateMax: 1.22,
-  rateBoost: 1.38,
-  rateTurbo: 1.5,
+  rateMid: 1.0,
+  rateMax: 1.1,
+  rateBoost: 1.15,
+  rateTurbo: 1.2,
   /**
    * Bornes de la vitesse de lecture. Depuis que le morceau passe par Web
    * Audio, la fenêtre de coupure des éléments média ne s'applique plus ; ces

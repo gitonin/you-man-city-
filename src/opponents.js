@@ -71,9 +71,17 @@ function shipGeometry() {
  * tracer une trajectoire sinueuse qui évite le joueur quand il est à côté.
  */
 export function createOpponents(scene, track, theme) {
-  const count = RACE.opponents;
+  // Le parcours bonus se court seul : zéro est une valeur acceptée, et un
+  // `InstancedMesh` de taille nulle n'est pas une chose à construire.
+  const count = theme.opponents ?? RACE.opponents;
   const group = new Group();
   scene.add(group);
+  if (count === 0) {
+    return {
+      group, racers: [], total: 1,
+      reset() {}, update: () => false, rankOf: () => 1,
+    };
+  }
 
   const bodies = new InstancedMesh(
     shipGeometry(),
