@@ -35,11 +35,24 @@ Trois tours, cinq adversaires, les chevrons orange donnent une survitesse, les
 murs et les accrochages coûtent du bouclier. **Chaque circuit a ses barrages**
 à esquiver, et chacun a un passage.
 
-Le son et les capteurs sont réclamés **au tout premier appui**, celui qui amène
-sur le titre. L'ordre n'est pas libre : le son d'abord et sans attendre, les
-capteurs ensuite. iOS ouvre une boîte de dialogue pour `requestPermission`, et
-toute attente avant `play()` ferait sortir du contexte de geste, auquel cas le
-son serait refusé. Refusés, les capteurs sont redemandés à la tape suivante.
+**Les capteurs se demandent depuis le titre**, par un bouton qui occupe l'écran
+tant qu'ils ne répondent pas : c'est la première chose à faire en arrivant, et
+la seule que l'utilisateur ne peut pas deviner. iOS ouvre une boîte de dialogue
+pour `requestPermission`, qui ne s'obtient que dans un geste — une demande au
+chargement serait refusée sans rien afficher. Le bouton n'apparaît que là où
+l'autorisation se demande vraiment ; ailleurs, le gyroscope est accordé sans
+rien demander, et sur un ordinateur il ne renverra simplement jamais rien.
+
+C'est d'ailleurs la distinction qui compte : le gyroscope n'est « vivant » que
+s'il a réellement envoyé quelque chose. Se fier au seul drapeau d'activation
+couperait le repli au doigt et au clavier sur ordinateur, et il ne resterait
+plus aucune commande.
+
+**Le contexte audio se réveille au premier appui, mais le morceau ne part qu'au
+départ d'une course.** Un `AudioContext` ne peut reprendre que dans un geste ;
+la lecture, elle, se déclenche quand on veut une fois le contexte vivant. On
+sépare donc les deux : les menus restent silencieux, et la musique n'a plus
+besoin d'être débloquée au moment précis où elle démarre.
 
 Sans gyroscope (ordinateur, ou capteurs refusés) : la moitié gauche de l'écran
 dirige, la moitié droite fait manette au doigt ; au clavier, flèches
@@ -132,6 +145,38 @@ construction et rangée dans la couleur des sommets, comme à l'époque.
 pixels de haut, puis étirée au plein écran au plus proche voisin. La passe
 finale réduit à 15 bits avec un tramage ordonné 4×4, ajoute les lignes de
 balayage, la pluie, le bombement du tube et la vignette.
+
+## Les écrans, et ce qui tient dedans
+
+Aucun menu ne défile, ni debout ni couché — c'est une contrainte, pas une
+conséquence. Les listes d'explication passent en deux colonnes, les cartes de
+circuit perdent leur paragraphe au profit d'une vignette, et le diagnostic
+audio se replie derrière un chevron : il sert une fois par appareil, pas à
+chaque passage dans les réglages. Vérifié par mesure du débordement de chaque
+écran dans les deux formats, qui vaut zéro partout.
+
+**Les vignettes ne sont pas des captures.** On repeint chaque circuit en deux
+dimensions à partir de sa palette — le ciel et ses étoiles, la ligne
+d'horizon, la chaussée en fuite avec ses bordures, les silhouettes du décor,
+une lueur d'accent au point de fuite. Une vraie capture demanderait de monter
+cinq scènes au démarrage et une image par circuit à télécharger ; celle-ci
+coûte un canvas de trois cents pixels et suit automatiquement toute
+modification de palette.
+
+**La pause ouvre tout.** Contrôles et scores s'y atteignent comme depuis le
+titre, et leur bouton de retour ramène là d'où l'on vient : sans cela, quitter
+les réglages en pleine course renverrait au menu principal et abandonnerait la
+partie.
+
+## L'inclinomètre
+
+Deux axes à montrer, donc un disque et une bille plutôt qu'une jauge. La bille
+dit d'un coup d'œil où en est l'appareil dans les deux sens : horizontalement
+la direction, verticalement les gaz, et le centre du disque est le neutre,
+c'est-à-dire l'angle auquel on tient le téléphone. Un trait la relie au centre,
+pour qu'on lise l'écart et pas seulement la position ; elle vire à l'ambre au
+turbo, au rouge quand le pied est levé. Sans gyroscope, elle reste et le disque
+porte la mention « TACT ».
 
 ## Le décompte
 
@@ -402,7 +447,7 @@ dans les virages, éviter le joueur quand il arrive à côté.
 | `MUSIC.sampleRate` | config | taux du contexte — c'est lui qui fixe la mémoire du morceau |
 | `INPUT.tiltSign` | config | sens par défaut, que le menu peut inverser |
 | `MUSIC.bpm` / `beatOffset` | config | calage du volet rythmique |
-| `GLITCH.*` | config | fond, rafales, pic de choc, plafond |
+| `GLITCH.*` | config | fond, rafales, pic de choc, plafond — abaissés pour la lisibilité |
 | `RENDER.internalHeight` | config | définition interne — le plus gros levier de performance |
 | `THEMES` | themes | tracé, palette, brouillard et décor de chaque circuit |
 

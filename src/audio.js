@@ -430,6 +430,20 @@ export function createAudio({ context = null } = {}) {
     load,
     /** Construit le graphe sans attendre un geste : pour le rendu hors ligne. */
     prime() { ensureCtx(); },
+
+    /**
+     * Réveille le contexte sans rien jouer.
+     *
+     * Un `AudioContext` ne peut reprendre que dans un geste de l'utilisateur,
+     * mais une fois vivant il joue quand on le lui demande. On profite donc du
+     * tout premier appui pour le réveiller, et la musique ne part qu'au départ
+     * d'une course — les menus restent silencieux sans que le son ait à être
+     * « débloqué » au moment où on en a besoin.
+     */
+    unlock() {
+      ensureCtx();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    },
     /** Le morceau est-il décodé et prêt ? */
     get buffered() { return buffered; },
     get decoding() { return decoding; },

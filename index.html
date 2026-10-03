@@ -115,14 +115,14 @@
             <use href="#ym-word" class="ym-w" />
           </svg>
         </div>
-        <p class="blurb">Antigravité. Quatre circuits, un parcours bonus.<br />La bande-son dérape avec vous.</p>
-
+        <button id="go-gyro" class="cta gyro" hidden>
+          <span>Activer le gyroscope</span><b id="gyro-state">requis</b>
+        </button>
         <div class="menu">
           <button id="go-select" class="cta">Courir</button>
           <button id="go-scores" class="cta ghosty">Scores</button>
           <button id="go-controls" class="cta ghosty">Contrôles</button>
         </div>
-        <p class="fineprint">You Man — « Reborn » · son requis</p>
       </div>
     </section>
 
@@ -141,13 +141,12 @@
         <p class="eyebrow">parcours bonus</p>
         <h2 id="brief-name" class="headline">METEOR RUN</h2>
         <ul class="howto">
-          <li><b>Une seule traversée</b> — pas de tours, pas d'adversaires</li>
-          <li><b>Les gaz se mettent seuls</b> — le tangage ne sert à rien ici</li>
-          <li><b>Pencher pour esquiver</b> — c'est la seule commande</li>
-          <li><b>Chaque barrage a un passage</b> — deux montants lumineux le marquent</li>
-          <li><b>Une roche touchée coûte cher</b> — bouclier à zéro, et c'est fini</li>
+          <li><b>Une traversée</b> sans adversaire</li>
+          <li><b>Les gaz</b> se mettent seuls</li>
+          <li><b>Pencher</b> pour esquiver</li>
+          <li><b>Un passage</b> par barrage</li>
         </ul>
-        <p class="fineprint">le temps de la traversée est gardé comme un record</p>
+        <p class="fineprint">une roche touchée coûte cher · le temps est gardé</p>
         <button id="brief-go" class="cta">Lancer la traversée</button>
         <button class="cta ghosty back" data-back="select">Retour</button>
       </div>
@@ -170,10 +169,10 @@
       <div class="inner wide">
         <p class="eyebrow">contrôles</p>
         <ul class="howto">
-          <li><b>Pencher à gauche / à droite</b> — diriger</li>
-          <li><b>Pencher vers l'avant</b> — mettre les gaz</li>
-          <li><b>Ramener vers soi</b> — lever le pied</li>
-          <li><b>Double appui</b> — turbo</li>
+          <li><b>Pencher ⟵ ⟶</b> diriger</li>
+          <li><b>Pencher ⟱</b> accélérer</li>
+          <li><b>Ramener ⟰</b> ralentir</li>
+          <li><b>Double appui</b> turbo</li>
         </ul>
         <div class="opts">
           <button id="opt-invert" class="opt" aria-pressed="false">
@@ -189,12 +188,11 @@
             <span>Son</span><b id="opt-sound-val">activé</b>
           </button>
         </div>
-        <p class="fineprint">
-          l'angle auquel vous tenez l'appareil est le neutre, et le neutre est
-          mi-régime · « recentrer » le reprend · sans gyroscope : moitié gauche
-          pour diriger, manette à droite, flèches au clavier
-        </p>
-        <pre id="audio-diag" class="diag">—</pre>
+        <p class="fineprint">l'angle de maintien est le neutre, et le neutre est mi-régime</p>
+        <details class="fold">
+          <summary>diagnostic</summary>
+          <pre id="audio-diag" class="diag">—</pre>
+        </details>
         <button class="cta ghosty back" data-back="title">Retour</button>
       </div>
     </section>
@@ -206,8 +204,14 @@
         <h2 id="pause-track" class="headline">—</h2>
         <div class="menu">
           <button id="pause-resume" class="cta">Reprendre</button>
-          <button id="pause-restart" class="cta ghosty">Recommencer</button>
-          <button id="pause-quit" class="cta ghosty">Circuits</button>
+          <div class="row">
+            <button id="pause-controls" class="cta ghosty">Contrôles</button>
+            <button id="pause-scores" class="cta ghosty">Scores</button>
+          </div>
+          <div class="row">
+            <button id="pause-restart" class="cta ghosty">Recommencer</button>
+            <button id="pause-quit" class="cta ghosty">Circuits</button>
+          </div>
         </div>
       </div>
     </section>

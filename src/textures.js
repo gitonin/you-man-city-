@@ -478,6 +478,116 @@ export function makeWetTexture(theme) {
   return finish(el, { srgb: false });
 }
 
+/**
+ * Vignette de circuit, pour habiller les cartes du menu.
+ *
+ * Ce n'est pas une capture du jeu : on repeint la scène en deux dimensions à
+ * partir de la palette du thème — le ciel, la ligne d'horizon, la chaussée en
+ * fuite et les silhouettes du décor. Une vraie capture demanderait de monter
+ * cinq scènes au démarrage, et une image par circuit à télécharger ; celle-ci
+ * coûte un canvas de trois cents pixels et suit automatiquement toute
+ * modification de palette.
+ *
+ * @returns {string} une URL de données, à poser en fond de carte
+ */
+export function makeTrackCardImage(theme) {
+  const W = 320;
+  const H = 150;
+  const { el, ctx } = surface(W, H);
+  ctx.imageSmoothingEnabled = true;
+
+  const horizon = H * 0.46;
+
+  // ciel : le dégradé du thème, dont on ne garde que la moitié haute
+  const sky = ctx.createLinearGradient(0, 0, 0, horizon);
+  for (const [stop, color] of theme.sky) {
+    sky.addColorStop(Math.max(0, Math.min(1, 1 - stop * 1.6)), color);
+  }
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, horizon);
+
+  if (theme.stars) {
+    ctx.fillStyle = '#cfe0ff';
+    for (let i = 0; i < theme.stars / 4; i++) {
+      ctx.globalAlpha = rand(0.2, 0.9);
+      ctx.fillRect(rand(0, W), rand(0, horizon), 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // sol, ou le vide
+  ctx.fillStyle = theme.ground ? theme.road.shades[2] : theme.sky[0][1];
+  ctx.fillRect(0, horizon, W, H - horizon);
+
+  // silhouettes : hautes et serrées en ville, basses et dentelées en orbite
+  const rocky = theme.scenery === 'space';
+  ctx.fillStyle = rocky ? '#2b2f3a' : '#0d1118';
+  for (let i = 0; i < 26; i++) {
+    const x = rand(-10, W);
+    const w = rocky ? rand(16, 46) : rand(12, 34);
+    const h = rocky ? rand(6, 26) : rand(18, 86);
+    if (rocky) {
+      ctx.beginPath();
+      ctx.moveTo(x, horizon);
+      ctx.lineTo(x + w * 0.5, horizon - h);
+      ctx.lineTo(x + w, horizon);
+      ctx.fill();
+    } else {
+      ctx.fillRect(x, horizon - h, w, h);
+      ctx.fillStyle = pick(theme.windows);
+      ctx.globalAlpha = 0.5;
+      for (let k = 0; k < 5; k++) ctx.fillRect(x + rand(2, w - 4), horizon - rand(4, h), 2, 2);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0d1118';
+    }
+  }
+
+  // la chaussée en fuite, bordures comprises
+  const apex = W / 2;
+  const road = (inset, fill) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(apex - 3 - inset * 0.06, horizon);
+    ctx.lineTo(apex + 3 + inset * 0.06, horizon);
+    ctx.lineTo(W * 0.5 + (W * 0.62 - inset), H);
+    ctx.lineTo(W * 0.5 - (W * 0.62 - inset), H);
+    ctx.closePath();
+    ctx.fill();
+  };
+  road(0, theme.road.kerb[1]);
+  road(14, theme.road.base);
+
+  // voûte, pour les circuits couverts
+  if (theme.tunnels.length > 2 || theme.scenery === 'tube') {
+    const arch = ctx.createLinearGradient(0, 0, 0, horizon);
+    arch.addColorStop(0, theme.wall.strip);
+    arch.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = arch;
+    ctx.fillRect(0, 0, W, horizon);
+    ctx.globalAlpha = 1;
+  }
+
+  // lueur d'accent au point de fuite, et assombrissement des bords
+  const glow = ctx.createRadialGradient(apex, horizon, 0, apex, horizon, W * 0.42);
+  glow.addColorStop(0, `#${theme.accent.toString(16).padStart(6, '0')}`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  const shade = ctx.createLinearGradient(0, 0, W, 0);
+  shade.addColorStop(0, 'rgba(4, 7, 12, 0.92)');
+  shade.addColorStop(0.55, 'rgba(4, 7, 12, 0.3)');
+  shade.addColorStop(1, 'rgba(4, 7, 12, 0.72)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, W, H);
+
+  grain(ctx, W, H, 0.08, 2);
+  return el.toDataURL('image/png');
+}
+
 /** Portique rythmique : une barre lumineuse. */
 export function makeGateTexture() {
   const W = 32;

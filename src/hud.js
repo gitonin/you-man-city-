@@ -64,6 +64,7 @@ const AMBER = '#ffa023';
 const DIM = 'rgba(160, 190, 215, 0.55)';
 
 const pad2 = (n) => String(Math.floor(n)).padStart(2, '0');
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /** mm:ss.cc, découpé pour afficher les centièmes en petit. */
 function splitTime(seconds) {
@@ -180,20 +181,52 @@ export function createHud() {
     writeRight(tt.frac, rightEdge - 2 * m, pad + 9 * m, m, CYAN);
     writeRight(tt.main, rightEdge - fracW - 4 * m, pad + 2 * m, big, INK);
 
-    // ------------------------------------------------- manette, au bord droit
-    const thrH = Math.round(H * 0.26);
-    const thrY = Math.round(H * 0.36);
-    const thrW = 5 * m;
-    const thrX = W - pad - thrW;
-    ctx.fillStyle = 'rgba(8, 14, 20, 0.6)';
-    ctx.fillRect(thrX, thrY, thrW, thrH);
-    const fillH = Math.round(thrH * Math.max(0, Math.min(1, v.throttle)));
-    ctx.fillStyle = v.turbo > 0 ? AMBER : v.throttle > 0.95 ? '#b9f6ff' : CYAN;
-    ctx.fillRect(thrX + 1, thrY + thrH - fillH + 1, thrW - 2, Math.max(0, fillH - 2));
-    // graduations
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    for (let k = 1; k < 4; k++) ctx.fillRect(thrX, thrY + (thrH * k) / 4, thrW, 1);
-    write('T', thrX + m, thrY - 8 * m, m, DIM);
+    // --------------------------------------------- inclinomètre, en bas à droite
+    //
+    // Deux axes à montrer, donc un disque et une bille plutôt qu'une jauge :
+    // la bille dit d'un coup d'œil où en est l'appareil dans les deux sens.
+    // Horizontalement c'est la direction, verticalement les gaz, et le centre
+    // du disque est le neutre — l'angle auquel on tient le téléphone.
+    const r = Math.round(H * 0.055);
+    const cx = W - pad - r;
+    const cy = Math.round(H * 0.74);
+    const ring = (radius, style, width = 1) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width * m;
+      ctx.stroke();
+    };
+
+    ctx.fillStyle = 'rgba(8, 14, 20, 0.34)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ring(r, 'rgba(165, 210, 240, 0.62)');
+
+    // repères du neutre
+    ctx.fillStyle = 'rgba(165, 210, 240, 0.3)';
+    ctx.fillRect(cx - r + 2 * m, cy, 2 * r - 4 * m, 1);
+    ctx.fillRect(cx, cy - r + 2 * m, 1, 2 * r - 4 * m);
+
+    // la bille : plein gaz en haut, pied levé en bas
+    const bx = cx + clamp(v.steer, -1, 1) * (r - 3 * m);
+    const by = cy - (clamp(v.throttle, 0, 1) * 2 - 1) * (r - 3 * m);
+    ctx.fillStyle = v.turbo > 0 ? AMBER
+      : v.throttle > 0.95 ? '#b9f6ff'
+        : v.throttle < 0.08 ? HOT : CYAN;
+    ctx.beginPath();
+    ctx.arc(bx, by, 2.6 * m, 0, Math.PI * 2);
+    ctx.fill();
+    // trace vers le neutre, pour lire l'écart et pas seulement la position
+    ctx.strokeStyle = 'rgba(95, 240, 255, 0.45)';
+    ctx.lineWidth = m;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+
+    if (!v.gyro) write('TACT', cx - 11 * m, cy + r + 2 * m, m, DIM);
 
     // ---------------------------------------------------------- bandeau bas
     const bottom = H - padBottom;

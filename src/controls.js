@@ -44,6 +44,16 @@ export function createControls(surface) {
   let lastPitch = null;
 
   /**
+   * Le gyroscope n'est « vivant » que s'il a réellement envoyé quelque chose.
+   *
+   * Sur ordinateur, `DeviceOrientationEvent` existe et l'autorisation est
+   * accordée sans rien demander — mais aucun événement n'arrive jamais. Se
+   * fier au seul drapeau d'activation couperait alors le repli au doigt et au
+   * clavier, et il ne resterait plus aucune commande.
+   */
+  const gyroLive = () => state.gyroAvailable && state.gyroEnabled;
+
+  /**
    * Le roulis tel que le ressent la main, quelle que soit la façon de tenir.
    *
    * `gamma` est la rotation autour de l'axe long de l'appareil : debout, c'est
@@ -149,7 +159,7 @@ export function createControls(surface) {
   let lastTapY = 0;
 
   const isSteeringZone = (clientX) => {
-    if (state.gyroEnabled) return false;
+    if (gyroLive()) return false;
     const rect = surface.getBoundingClientRect();
     return clientX - rect.left < rect.width * 0.5;
   };
@@ -195,7 +205,7 @@ export function createControls(surface) {
     // Repli sans gyroscope : la manette au doigt, vers le haut on accélère.
     // Avec le gyroscope, le tangage tient les gaz et le doigt n'a rien à y
     // faire — il les reprendrait pour une image avant d'être écrasé.
-    if (state.gyroEnabled) return;
+    if (gyroLive()) return;
     const travel = long * INPUT.throttleTravel;
     state.throttle = clamp(t.throttle + (t.y - e.clientY) / travel, 0, 1);
   }
@@ -222,7 +232,7 @@ export function createControls(surface) {
   function applyKeys() {
     const left = keys.has('arrowleft') || keys.has('a') || keys.has('q');
     const right = keys.has('arrowright') || keys.has('d');
-    if (!state.gyroEnabled && (left || right || state.source === 'keys')) {
+    if (!gyroLive() && (left || right || state.source === 'keys')) {
       state.steer = (right ? 1 : 0) - (left ? 1 : 0);
       if (left || right) state.source = 'keys';
     }
@@ -248,7 +258,7 @@ export function createControls(surface) {
 
   /** Appelé une fois par image : entretient les commandes continues. */
   function tick(dt) {
-    if (state.gyroEnabled) return;
+    if (gyroLive()) return;
     const up = keys.has('arrowup') || keys.has('w') || keys.has('z') || keys.has(' ');
     const down = keys.has('arrowdown') || keys.has('s');
     if (up) state.throttle = clamp(state.throttle + dt * 1.8, 0, 1);
@@ -272,6 +282,8 @@ export function createControls(surface) {
   return {
     state,
     settings,
+    /** Le capteur envoie-t-il vraiment quelque chose ? */
+    get gyroLive() { return gyroLive(); },
     enableGyro,
     recalibrate,
     tick,

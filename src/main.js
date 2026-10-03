@@ -258,43 +258,45 @@ const ui = createUi(store, {
   onQuit: () => quitToMenu(),
   onRecenter: () => controls.recalibrate(),
   onSoundRetry: () => audio.retry().then((ok) => ui.setSoundBlocked(!ok)),
+  onGyroAsk: () => askGyro(),
   onSettings: () => applySettings(),
 });
 
 /**
- * Son et capteurs se réclament tous deux dans un geste de l'utilisateur, et
- * on prend donc le tout premier — celui qui amène sur le titre.
+ * Demande les capteurs. Appelée par le bouton du titre, par le tout premier
+ * appui, et une dernière fois au lancement d'une course.
  *
- * L'ordre n'est pas libre : le son d'abord et **sans attendre**, les capteurs
- * ensuite. iOS ouvre une boîte de dialogue pour `requestPermission`, et toute
- * attente avant `play()` ferait sortir du contexte de geste, auquel cas le son
- * serait refusé.
- *
- * On retente à chaque tape tant que l'un des deux manque : sur mobile, la
- * première tentative tombe parfois au mauvais moment du cycle de vie.
+ * iOS ouvre une boîte de dialogue, qui ne s'obtient que dans un geste de
+ * l'utilisateur — d'où le bouton explicite plutôt qu'une demande au chargement,
+ * qui serait refusée sans rien afficher.
  */
 let gyroAsked = false;
+async function askGyro() {
+  if (controls.state.gyroEnabled) return true;
+  const ok = await controls.enableGyro();
+  gyroAsked = true;
+  ui.setGyro(ok, !ok);
+  applySettings();
+  return ok;
+}
+
+/**
+ * Le contexte audio se réveille au tout premier geste, mais **le morceau ne
+ * part qu'au départ d'une course**. Un `AudioContext` ne peut reprendre que
+ * dans un geste ; la lecture, elle, se déclenche quand on veut une fois le
+ * contexte vivant. On sépare donc les deux : les menus restent silencieux, et
+ * la musique n'a plus besoin d'être « débloquée » au moment où elle démarre.
+ */
 dom.frame.addEventListener('pointerdown', () => {
-  const needSound = !audio.playing;
-  if (needSound) audio.start();
-
-  if (!gyroAsked) {
-    gyroAsked = true;
-    controls.enableGyro().then((ok) => {
-      // refusé : on laisse la porte ouverte pour une prochaine tape
-      gyroAsked = ok;
-      ui.setGyro(ok);
-      applySettings();
-    });
-  }
-
-  if (needSound) setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 400);
+  audio.unlock();
+  if (!gyroAsked) askGyro();
 });
 
 async function startRace(themeId) {
   // Le son d'abord, sans attendre : une autorisation de capteurs demandée
   // avant ferait perdre le contexte de geste et le son serait refusé.
   if (!audio.playing) audio.start();
+  ui.setSoundBlocked(false);
 
   if (!world || world.theme.id !== themeId) loadTrack(themeId);
 
@@ -310,14 +312,9 @@ async function startRace(themeId) {
   phase = 'countdown';
   ui.hideAll();
 
-  // Les capteurs ont normalement été demandés au tout premier geste, sur le
-  // titre. On retente ici pour le cas où ils auraient été refusés alors.
-  if (!controls.state.gyroEnabled) {
-    const gotGyro = await controls.enableGyro();
-    gyroAsked = gotGyro;
-    ui.setGyro(gotGyro);
-    applySettings();
-  }
+  // Les capteurs ont normalement été accordés sur le titre. On retente ici
+  // pour le cas où ils auraient été refusés alors.
+  await askGyro();
   setTimeout(() => ui.setSoundBlocked(!audio.playing, audio.failed), 500);
   clock.getDelta();
 }
@@ -399,6 +396,8 @@ function hudState(center, sub) {
     speed: s.speed * SPEED_DISPLAY,
     shield: s.shield,
     throttle: controls.state.throttle,
+    steer: controls.state.steer,
+    gyro: controls.gyroLive,
     boost: s.boost / SHIP.boostDuration,
     turbo: s.turbo / SHIP.turboDuration,
     pulse: world ? world.rhythm.state.pulse : 0,
@@ -611,6 +610,14 @@ function frame() {
 loadTrack(THEMES[0].id);
 resize();
 applySettings();
+/**
+ * Le bouton d'activation n'a de sens que là où l'autorisation se demande :
+ * sur iOS. Ailleurs, `DeviceOrientationEvent` est accordé sans rien demander —
+ * et sur un ordinateur il ne renverra simplement jamais rien, auquel cas le
+ * doigt et le clavier prennent le relais sans qu'on ait à le signaler.
+ */
+ui.setGyro(typeof window.DeviceOrientationEvent?.requestPermission !== 'function');
+
 ui.show('boot');
 hud.draw(hudState('', ''));
 frame();

@@ -132,17 +132,23 @@ export const MUSIC = {
 
 /** Corruption de l'image. Le glitch est un personnage, pas un accident. */
 export const GLITCH = {
-  idle: 0.05,
-  speedGain: 0.09,
+  /**
+   * Doses réduites : le grain reste permanent, mais il ne mange plus l'image.
+   * À pleine corruption on ne distinguait plus un barrage d'un adversaire, et
+   * sur une piste où il faut maintenant esquiver, c'est la lisibilité qui
+   * passe devant le style.
+   */
+  idle: 0.03,
+  speedGain: 0.05,
   /** Pic sur le temps fort de chaque mesure. */
-  beatKick: 0.1,
-  hitBurst: 0.42,
+  beatKick: 0.055,
+  hitBurst: 0.28,
   hitDecay: 1.8,
-  burstChance: 0.4,
-  burstTime: [0.06, 0.3],
-  burstPower: [0.16, 0.5],
+  burstChance: 0.26,
+  burstTime: [0.05, 0.22],
+  burstPower: [0.09, 0.28],
   /** Plafond : au-delà, l'image se dissout et on ne pilote plus rien. */
-  ceiling: 0.6,
+  ceiling: 0.38,
 };
 
 /** Course. */

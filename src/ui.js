@@ -1,4 +1,5 @@
 import { THEMES } from './themes.js';
+import { makeTrackCardImage } from './textures.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,6 +68,13 @@ export function createUi(store, handlers) {
   let current = 'boot';
   /** Le circuit décrit par l'écran de briefing, le temps qu'on le lise. */
   let briefed = null;
+  /**
+   * Écran d'où l'on vient. « Contrôles » et « Scores » s'ouvrent depuis le
+   * titre comme depuis la pause ; leur bouton de retour doit ramener là d'où
+   * l'on vient, sinon quitter les réglages en pleine course renvoie au menu
+   * principal et abandonne la partie.
+   */
+  let origin = 'title';
 
   function show(name) {
     current = name;
@@ -84,28 +92,26 @@ export function createUi(store, handlers) {
   }
 
   // ------------------------------------------------------------- circuits
+  /** Les vignettes sont peintes une fois : elles ne dépendent que du thème. */
+  const cardArt = new Map();
+
   function renderTracks() {
     const list = $('track-list');
     list.textContent = '';
     for (const theme of THEMES) {
       const best = store.best(theme.id);
+      if (!cardArt.has(theme.id)) cardArt.set(theme.id, makeTrackCardImage(theme));
+
       const card = document.createElement('button');
-      card.className = 'card';
+      card.className = theme.bonus ? 'card bonus' : 'card';
       card.style.setProperty('--accent', `#${theme.accent.toString(16).padStart(6, '0')}`);
-      card.innerHTML = `
-        <h3></h3>
-        <p class="tag"></p>
-        <p class="desc"></p>
-        <p class="best"></p>`;
+      card.style.backgroundImage = `url(${cardArt.get(theme.id)})`;
+      card.innerHTML = '<h3></h3><p class="tag"></p><p class="best"></p>';
       card.querySelector('h3').textContent = theme.name;
       card.querySelector('.tag').textContent = theme.tag;
-      card.querySelector('.desc').textContent = theme.blurb;
       card.querySelector('.best').textContent = best
-        ? (theme.bonus
-          ? `record ${formatTime(best.total)}`
-          : `record ${formatTime(best.total)} · tour ${formatTime(best.lap)}`)
+        ? `record ${formatTime(best.total)}`
         : 'jamais couru';
-      if (theme.bonus) card.classList.add('bonus');
       // Le parcours bonus ne se joue pas comme les autres : on l'explique
       // avant, sinon on découvre la règle en percutant le premier barrage.
       card.addEventListener('click', () => {
@@ -179,10 +185,13 @@ export function createUi(store, handlers) {
 
   // --------------------------------------------------------------- liaisons
   $('go-select').addEventListener('click', () => show('select'));
-  $('go-scores').addEventListener('click', () => show('scores'));
-  $('go-controls').addEventListener('click', () => show('controls'));
+  $('go-scores').addEventListener('click', () => { origin = 'title'; show('scores'); });
+  $('go-controls').addEventListener('click', () => { origin = 'title'; show('controls'); });
+  $('pause-scores').addEventListener('click', () => { origin = 'pause'; show('scores'); });
+  $('pause-controls').addEventListener('click', () => { origin = 'pause'; show('controls'); });
+  $('go-gyro').addEventListener('click', () => handlers.onGyroAsk());
   for (const el of document.querySelectorAll('[data-back]')) {
-    el.addEventListener('click', () => show(el.dataset.back));
+    el.addEventListener('click', () => show(el.dataset.back === 'title' ? origin : el.dataset.back));
   }
   $('wipe-scores').addEventListener('click', () => { store.wipe(); renderScores(); });
   $('brief-go').addEventListener('click', () => { if (briefed) handlers.onStart(briefed.id); });
@@ -221,8 +230,19 @@ export function createUi(store, handlers) {
       show('results');
     },
 
-    /** Le gyroscope répond : on propose de recentrer. */
-    setGyro(on) { centerChip.hidden = !on; },
+    /**
+     * État des capteurs. Le bouton d'activation occupe le titre tant qu'ils
+     * ne répondent pas — c'est la première chose à faire en arrivant, et la
+     * seule que l'utilisateur ne peut pas deviner. Une fois accordés, il
+     * disparaît et la pastille « recentrer » prend le relais en course.
+     */
+    setGyro(on, asked = false) {
+      centerChip.hidden = !on;
+      const btn = $('go-gyro');
+      btn.hidden = on;
+      $('gyro-state').textContent = asked ? 'refusé — réessayer' : 'requis';
+      btn.classList.toggle('refused', asked);
+    },
 
     /** Le navigateur a refusé le son : on laisse un moyen de le relancer. */
     setSoundBlocked(blocked, failed = false) {
